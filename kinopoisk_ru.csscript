@@ -19,7 +19,7 @@ using MediaPortal.Common.Utils;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20151213.01 by ajs";
+    const string strKinopoiskVersion = "20160105.01.Beta by ajs";
 
     public Grabber()
     {
@@ -179,7 +179,10 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             string rx_title    = @"moviename[^>]+>(?<movieTitle>[^<]+)";
             string movieTitle  = ParseSingleValue(detailsPage, rx_title, "movieTitle", false);
             movieTitle         = Normalize(Regex.Replace(movieTitle, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
-            movieDetails.Title = string.Format(detailsConfig.TitlePattern, movieTitle, (string.IsNullOrEmpty(alternateTitle) && detailsConfig.ReplaceEmptyAlternate) ? movieTitle : alternateTitle, movieDetails.Year);
+            movieDetails.Title = string.Format(detailsConfig.TitlePattern, movieTitle, 
+                                                                           (string.IsNullOrEmpty(alternateTitle) && detailsConfig.ReplaceEmptyAlternate) ? movieTitle : alternateTitle, 
+                                                                           movieDetails.Year, 
+                                                                           (!string.IsNullOrEmpty(movieTitle) && !string.IsNullOrEmpty(alternateTitle)) ? detailsConfig.TitleSeparator : string.Empty);
 
             // IMDB Title & Year for IMDB ID
             string imdbDetails = string.Empty;
@@ -217,10 +220,16 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.WritingCredits = ConvertListToString(writers, ", ", 0);
             
             // Review (Trivia)
+            string rx_trivia_block       = @"Знаете.ли.вы..что...[\s\S]+?<tr(?<movieTrivias>[\s\S]+?)<\/tr>";
+            string rx_triviaerror_block  = @"Ошибки.в.фильме[\s\S]+?<tr(?<movieTriviaErrors>[\s\S]+?)<\/tr>";
+            string triviaBlock           = ParseSingleValue(detailsPage, rx_trivia_block, "movieTrivias", true);
+            string triviaErrorBlock      = ParseSingleValue(detailsPage, rx_triviaerror_block, "movieTriviaErrors", true);
             // string rx_trivia        = @"<li.+?trivia.+?>(?<movieTrivia>.+?)</li>";
             string rx_trivia        = @"<li[^>]+?trivia.+?>(?<movieTrivia>.+?)</li>";
-            ArrayList triviaList    = Parse(detailsPage, rx_trivia);
+            // ArrayList triviaList         = Parse(detailsPage, rx_trivia);
+            ArrayList triviaList         = Parse(triviaBlock, rx_trivia);
             movieDetails.UserReview = string.Empty;
+            movieDetails.UserReview += "Знаете ли вы, что...\n";
             if (triviaList != null && triviaList.Count > 0) {
               for(int i = 0; i < triviaList.Count; i++) {
                 Hashtable trivia = (Hashtable)triviaList[i];
@@ -232,6 +241,23 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 movieDetails.UserReview += "- "+triviaText+"\n"; 
               }
             }
+            // Review (Trivia) Errors
+            triviaList = Parse(triviaErrorBlock, rx_trivia);
+            if (triviaList != null && triviaList.Count > 0 && !string.IsNullOrEmpty(movieDetails.UserReview)) {
+                movieDetails.UserReview += "\nОшибки в фильме...\n"; 
+            }
+            if (triviaList != null && triviaList.Count > 0) {
+              for(int i = 0; i < triviaList.Count; i++) {
+                Hashtable trivia = (Hashtable)triviaList[i];
+                string triviaText = (string)trivia["movieTrivia"];
+                triviaText = triviaText.Trim().Replace("\n", "");
+                triviaText = Normalize(triviaText);
+                triviaText = Utils.stripHTMLtags(triviaText);
+                DebugLog(detailsConfig.Debug, "Trivia: {0}", triviaText);
+                movieDetails.UserReview += "- "+triviaText+"\n"; 
+              }
+            }
+          	movieDetails.UserReview += "\n---------------------------------"; 
           	movieDetails.UserReview += "\nIMDB: "+imdbDetails; 
           	movieDetails.UserReview += "\nKinopoisk: "+movieID+" "+movieTitle+" ("+movieDetails.Year+")"; 
           	movieDetails.UserReview += "\n\n";
@@ -737,8 +763,10 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
         }
         
         if (!string.IsNullOrEmpty(rx_strip)) {
-            searchString = Regex.Replace(searchString, rx_strip, string.Empty);
+            searchString = Regex.Replace(searchString, rx_strip, string.Empty, RegexOptions.IgnoreCase);
         }
+        rx_strip = @"[\.\s_]+";
+        searchString = Regex.Replace(searchString, rx_strip, " ", RegexOptions.IgnoreCase).Trim();
         
         Log.Debug("Kinopoisk.ru decode/strip search string: {0} -> {1}", str, searchString);
         // Log.Info("Debug - 1251 search string: {0}", HttpUtility.UrlEncode(searchString, Encoding.GetEncoding("windows-1251")));
@@ -755,7 +783,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 movieAlternate = movieTitle;
             }
                         
-            string formattedTitle = string.Format(searchConfig.TitlePattern, movieTitle, movieAlternate, year);
+            string movieSep       = (!string.IsNullOrEmpty(movieTitle) && !string.IsNullOrEmpty(movieAlternate)) ? searchConfig.TitleSeparator : string.Empty;
+            string formattedTitle = string.Format(searchConfig.TitlePattern, movieTitle, movieAlternate, year, movieSep);
             string searchTitle    = string.IsNullOrEmpty(movieAlternate) ? Translit(movieTitle) : movieAlternate;
 
             // Kinopoisk.ru doesn't provide IMDB_ID. Try to retrieve IMDB_ID
@@ -898,7 +927,7 @@ class WebSession {
                         // Try to get the encoding using the characterset
                         encoding = Encoding.GetEncoding(response.CharacterSet);
                     }
-                    catch (Exception e) {
+                    catch { // (Exception e) {
                         // If this fails default to the system's default encoding
                         encoding = Encoding.Default;
                     }
@@ -952,7 +981,8 @@ class WebSession {
 }
 
 class SearchConfig {
-    private string    m_titlePattern          = "{0}/{1} ({2})";
+    private string    m_titlePattern          = "{0}{3}{1} ({2})";
+    private string    m_separator             = " / ";
     private string    m_imdbPattern           = "{0} IMDB: {1} ({2}) - {3}";
     private ArrayList m_strips                = new ArrayList();
     private bool      m_replaceEmptyAlternate = false;
@@ -972,6 +1002,11 @@ class SearchConfig {
     public string IMDBPattern {
         get {
             return m_imdbPattern;
+        }
+    }
+    public string TitleSeparator {
+        get {
+            return m_separator;
         }
     }
     public bool ReplaceEmptyAlternate {
@@ -1019,6 +1054,11 @@ class SearchConfig {
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieTitle\}",     "{0}");
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieAlternate\}", "{1}");
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{year\}",           "{2}");
+                    m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieSeparator\}", "{3}");
+                }
+                node = root.SelectSingleNode("//search/title/separator");
+                if (node != null && node.FirstChild != null) {
+                    m_separator = node.FirstChild.Value;
                 }
                 node = root.SelectSingleNode("//search/title/replaceEmptyAlternateWithTitle");
                 if (node != null && node.FirstChild != null) {
@@ -1055,7 +1095,8 @@ class SearchConfig {
 }
 
 class DetailsConfig {
-    private string m_titlePattern          = "{0}/{1}";
+    private string m_titlePattern          = "{0}{3}{1} ({2})";
+    private string m_separator             = " / ";
     private bool   m_replaceEmptyAlternate = false;
     private bool   m_retrievePicture       = false;
     private string m_descriptionDelimiter  = string.Empty;
@@ -1074,6 +1115,11 @@ class DetailsConfig {
     public string TitlePattern {
         get {
             return m_titlePattern;
+        }
+    }
+    public string TitleSeparator {
+        get {
+            return m_separator;
         }
     }
     public bool ReplaceEmptyAlternate {
@@ -1145,6 +1191,11 @@ class DetailsConfig {
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieTitle\}",     "{0}");
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieAlternate\}", "{1}");
                     m_titlePattern = Regex.Replace(m_titlePattern, @"\{year\}",           "{2}");
+                    m_titlePattern = Regex.Replace(m_titlePattern, @"\{movieSeparator\}", "{3}");
+                }
+                node = root.SelectSingleNode("//search/title/separator");
+                if (node != null && node.FirstChild != null) {
+                    m_separator = node.FirstChild.Value;
                 }
                 node = root.SelectSingleNode("//details/title/replaceEmptyAlternateWithTitle");
                 if (node != null && node.FirstChild != null) {
