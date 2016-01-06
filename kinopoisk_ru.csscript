@@ -19,7 +19,7 @@ using MediaPortal.Common.Utils;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20160105.01.Beta by ajs";
+    const string strKinopoiskVersion = "20160106.01.Beta by ajs";
 
     public Grabber()
     {
