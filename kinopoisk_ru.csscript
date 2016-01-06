@@ -235,8 +235,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             string rx_triviaerror_block  = @"Ошибки.в.фильме[\s\S]+?<tr(?<movieTriviaErrors>[\s\S]+?)<\/tr>";
             string triviaBlock           = ParseSingleValue(detailsPage, rx_trivia_block, "movieTrivias", true);
             string triviaErrorBlock      = ParseSingleValue(triviaPage, rx_triviaerror_block, "movieTriviaErrors", true);
-            // string rx_trivia        = @"<li.+?trivia.+?>(?<movieTrivia>.+?)</li>";
-            string rx_trivia        = @"<li[^>]+?trivia.+?>(?<movieTrivia>.+?)</li>";
+            // string rx_trivia             = @"<li.+?trivia.+?>(?<movieTrivia>.+?)</li>";
+            string rx_trivia             = @"<li[^>]+?trivia.+?>(?<movieTrivia>.+?)</li>";
             // ArrayList triviaList         = Parse(detailsPage, rx_trivia);
             ArrayList triviaList         = Parse(triviaBlock, rx_trivia);
             movieDetails.UserReview = string.Empty;
