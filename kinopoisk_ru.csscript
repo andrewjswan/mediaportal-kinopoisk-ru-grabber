@@ -220,10 +220,21 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.WritingCredits = ConvertListToString(writers, ", ", 0);
             
             // Review (Trivia)
+            string triviaPage          = detailsPage;
+            if (detailsConfig.MovieFullTriviaError) {         
+              string _triviaURL        = string.Format("http://www.kinopoisk.ru/film/{0}/view_info/blooper/", movieID);
+              string _triviaPage       = string.Empty;
+              WebSession triviaSession = new WebSession();
+              if (triviaSession.Retrieve(_triviaURL, null, out _triviaPage)) {
+                if (!string.IsNullOrEmpty(_triviaPage)) {
+                  triviaPage = _triviaPage;  
+                }
+              }
+            }
             string rx_trivia_block       = @"Знаете.ли.вы..что...[\s\S]+?<tr(?<movieTrivias>[\s\S]+?)<\/tr>";
             string rx_triviaerror_block  = @"Ошибки.в.фильме[\s\S]+?<tr(?<movieTriviaErrors>[\s\S]+?)<\/tr>";
             string triviaBlock           = ParseSingleValue(detailsPage, rx_trivia_block, "movieTrivias", true);
-            string triviaErrorBlock      = ParseSingleValue(detailsPage, rx_triviaerror_block, "movieTriviaErrors", true);
+            string triviaErrorBlock      = ParseSingleValue(triviaPage, rx_triviaerror_block, "movieTriviaErrors", true);
             // string rx_trivia        = @"<li.+?trivia.+?>(?<movieTrivia>.+?)</li>";
             string rx_trivia        = @"<li[^>]+?trivia.+?>(?<movieTrivia>.+?)</li>";
             // ArrayList triviaList         = Parse(detailsPage, rx_trivia);
@@ -1106,6 +1117,7 @@ class DetailsConfig {
     private bool   m_Debug                 = false;
     private bool   m_FullMPAA              = true;
     private bool   m_RussianPR             = false;
+    private bool   m_fullTriviaError       = false;
     
     private static DetailsConfig m_detailsConfig = null;
 
@@ -1150,6 +1162,11 @@ class DetailsConfig {
     public bool Debug {
         get {
             return m_Debug;
+        }
+    }
+    public bool MovieFullTriviaError {
+        get {
+            return m_fullTriviaError;
         }
     }
     public bool FullMPAA {
@@ -1232,6 +1249,10 @@ class DetailsConfig {
                 node = root.SelectSingleNode("//details/debug");
                 if (node != null && node.FirstChild != null) {
                     m_Debug = "true".Equals(node.FirstChild.Value.ToLower());
+                }
+                node = root.SelectSingleNode("//details/fullTriviaError");
+                if (node != null && node.FirstChild != null) {
+                    m_fullTriviaError = "true".Equals(node.FirstChild.Value.ToLower());
                 }
             }
         } 
