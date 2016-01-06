@@ -19,7 +19,7 @@ using MediaPortal.Common.Utils;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20160106.01.Beta by ajs";
+    const string strKinopoiskVersion = "20160106.02.Beta by ajs";
 
     public Grabber()
     {
@@ -320,10 +320,6 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 Log.Info("MPAA : {0} ({1})", movieDetails.MPARating, FullMPARating.Replace("\n"," "));
                 movieDetails.Plot += "\n\n"+FullMPARating;
             }
-            // Add Description Delimeter to Movie Description
-            if (!string.IsNullOrEmpty(detailsConfig.DescriptionDelimiter)) {
-                movieDetails.Plot += "\r\n" + detailsConfig.DescriptionDelimiter;
-            }
 
             // Runtime
             string rx_runtime    = @"время</td><[^>]+>(?<movieRuntime>[\d]+)";
@@ -432,17 +428,33 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             }
 
             // Certification from IMDB
-            if (!string.IsNullOrEmpty(movieDetails.IMDBNumber) && (string.IsNullOrEmpty(movieDetails.MPARating))) {
+            // if (!string.IsNullOrEmpty(movieDetails.IMDBNumber) && (string.IsNullOrEmpty(movieDetails.MPARating))) {
+            if (!string.IsNullOrEmpty(movieDetails.IMDBNumber)) {
               string MPAAimdbURL  = string.Format("http://www.imdb.com/title/{0}/parentalguide#certification", movieDetails.IMDBNumber);
               string MPAAimdbPage = string.Empty;
 
               WebSession MPAAimdbSession = new WebSession();
               if (MPAAimdbSession.Retrieve(MPAAimdbURL, Encoding.GetEncoding("UTF-8"), out MPAAimdbPage)) {
+                if (string.IsNullOrEmpty(movieDetails.MPARating)) {
                   string regexPattern = @"href=./search/title[^>]+>UK:(?<Cert>[^<]+)</a>";
                   string Certificate  = Regex.Match(MPAAimdbPage, regexPattern).Groups["Cert"].Value;
                   movieDetails.MPARating = Certificate;
                   Log.Info("MPAA UK: {0}", movieDetails.MPARating);
+                }
+                else
+                {
+                  string regexPattern = @"\/mpaa.>MPAA[^>]+?>[^\"]+?\"[^>]+?>(?<CertDesc>[^<]+?)<";
+                  string CertDescription = Regex.Match(MPAAimdbPage, regexPattern).Groups["CertDesc"].Value;
+                  if (!string.IsNullOrEmpty(CertDescription)) {
+                    movieDetails.Plot += "\nMPAA: "+CertDescription;
+                    Log.Info("MPAA Description: {0}", CertDescription);
+                  }
+                }
               }
+            }
+            // Add Description Delimeter to Movie Description
+            if (!string.IsNullOrEmpty(detailsConfig.DescriptionDelimiter)) {
+                movieDetails.Plot += "\r\n" + detailsConfig.DescriptionDelimiter;
             }
 
             // Picture
