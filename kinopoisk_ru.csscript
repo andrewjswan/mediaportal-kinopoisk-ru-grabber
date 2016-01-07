@@ -446,8 +446,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   string regexPattern = @"\/mpaa.>MPAA[^>]+?>[^"+"\""+@"]+?"+"\""+@"[^>]+?>(?<CertDesc>[^<]+?)<";
                   string CertDescription = Regex.Match(MPAAimdbPage, regexPattern).Groups["CertDesc"].Value;
                   if (!string.IsNullOrEmpty(CertDescription)) {
-                    movieDetails.Plot += "\nMPAA: "+CertDescription;
-                    Log.Info("MPAA Description: {0}", CertDescription);
+                    movieDetails.Plot += "\nMPAA: "+CertDescription.Replace("\n"," ");
+                    Log.Info("MPAA Description: {0}", CertDescription.Replace("\n"," "));
                   }
                 }
               }
