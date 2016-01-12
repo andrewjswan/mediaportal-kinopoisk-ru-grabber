@@ -19,7 +19,7 @@ using MediaPortal.Common.Utils;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20160110.01 by ajs";
+    const string strKinopoiskVersion = "20160112.01 by ajs";
 
     public Grabber()
     {
@@ -183,6 +183,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                                                                            (string.IsNullOrEmpty(alternateTitle) && detailsConfig.ReplaceEmptyAlternate) ? movieTitle : alternateTitle, 
                                                                            movieDetails.Year, 
                                                                            (!string.IsNullOrEmpty(movieTitle) && !string.IsNullOrEmpty(alternateTitle)) ? detailsConfig.TitleSeparator : string.Empty);
+            // User Group
+            movieDetails.SingleUserGroup = (string.IsNullOrEmpty(alternateTitle) ? "Наши фильмы" : "Иностранные фильмы"); 
 
             // IMDB Title & Year for IMDB ID
             string imdbDetails = string.Empty;
@@ -478,26 +480,48 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.ThumbURL = string.Empty;
             if (detailsConfig.RetrievePicture) 
             {
-                if ("themoviedb".Equals(detailsConfig.PictureSource)) 
+                if ("themoviedb".Equals(detailsConfig.PictureSource) && (!String.IsNullOrEmpty(movieDetails.IMDBNumber) && !string.IsNullOrEmpty(detailsConfig.TMDbApiKey))) 
                 {
                 	// Picture from themoviedb
-                    string tmdbURL  = string.Format("http://api.themoviedb.org/2.1/Movie.getImages/ru/xml/{0}/{1}", detailsConfig.TMDbApiKey, movieDetails.IMDBNumber);
+                    // string tmdbURL  = string.Format("http://api.themoviedb.org/2.1/Movie.getImages/ru/xml/{0}/{1}", detailsConfig.TMDbApiKey, movieDetails.IMDBNumber);
+                    string tmdbURL  = string.Format("http://api.themoviedb.org/3/movie/{1}/images?api_key={0}&language=ru", detailsConfig.TMDbApiKey, movieDetails.IMDBNumber);
                     string tmdbPage = string.Empty;
                 
                     WebSession tmdbSession = new WebSession();
                     if (tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
                     {
-                        XmlDocument xmlDoc = new XmlDocument();
-                        xmlDoc.Load(new StringReader(tmdbPage));
-                        XmlNode root = xmlDoc.DocumentElement;
-                        XmlNode imageNode = root.SelectSingleNode("//movies/movie/images/poster/image[@size='original']");
-                        if (imageNode != null) {
-                            XmlAttributeCollection attrColl = imageNode.Attributes;
-                            XmlAttribute attr               = (XmlAttribute)attrColl.GetNamedItem("url");
-                            if (attr != null) {
-                                movieDetails.ThumbURL = attr.Value;
-                            }
+                      /*
+                      XmlDocument xmlDoc = new XmlDocument();
+                      xmlDoc.Load(new StringReader(tmdbPage));
+                      XmlNode root = xmlDoc.DocumentElement;
+                      XmlNode imageNode = root.SelectSingleNode("//movies/movie/images/poster/image[@size='original']");
+                      if (imageNode != null) {
+                          XmlAttributeCollection attrColl = imageNode.Attributes;
+                          XmlAttribute attr               = (XmlAttribute)attrColl.GetNamedItem("url");
+                          if (attr != null) {
+                              movieDetails.ThumbURL = attr.Value;
+                          }
+                      }
+                      */
+                      string tmdbJSON      = Regex.Match(tmdbPage, @"""posters"":\[.*?\]", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
+                      string matchPosters  = @"""file_path"":""/(?<Poster>.*?jpg)""";
+                      MatchCollection mcPs = Regex.Matches(tmdbJSON, matchPosters);
+                      
+                      if (mcPs.Count != 0)
+                      {
+                        foreach (Match mP in mcPs)
+                        {
+                          string strP = string.Empty;
+                          strP = mP.Groups["Poster"].Value;
+
+                          if (!string.IsNullOrEmpty(strP))
+                          {
+                            strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
+                            movieDetails.ThumbURL = strP;
+                            break;
+                          }
                         }
+                      }
                     }
                 } 
                 else 
@@ -592,6 +616,38 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 }
                 Log.Info("Picture URL for Mediaportal: {0}", movieDetails.ThumbURL);
             }
+
+            if (detailsConfig.TMDBGroups && !string.IsNullOrEmpty(movieDetails.IMDBNumber) && !string.IsNullOrEmpty(detailsConfig.TMDbApiKey))
+            {
+          	  // Lists from themoviedb
+              string tmdbURL  = string.Format("http://api.themoviedb.org/3/movie/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, movieDetails.IMDBNumber);
+              string tmdbPage = string.Empty;
+          
+              WebSession tmdbSession = new WebSession();
+              if (tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
+              {
+                string tmdbJSON      = Regex.Match(tmdbPage, @"belongs_to_collection.+?{[^}]+?}", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
+                string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\"";
+                MatchCollection mcLs = Regex.Matches(tmdbJSON, matchLists);
+                DebugLog(detailsConfig.Debug, "Movie groups JSON: {0}", tmdbJSON);
+                DebugLog(detailsConfig.Debug, "Movie groups Count: {0}", mcLs.Count);
+                
+                if (mcLs.Count != 0)
+                {
+                  foreach (Match mL in mcLs)
+                  {
+                    string strL = string.Empty;
+                    strL = mL.Groups["Collection"].Value;
+
+                    if (!string.IsNullOrEmpty(strL))
+                    {
+                      movieDetails.SingleUserGroup += (string.IsNullOrEmpty(movieDetails.SingleUserGroup) ? "" : "|") + strL;
+                    }
+                  }
+                }
+              }
+            }
+            DebugLog(detailsConfig.Debug, "Movie groups: {0}", movieDetails.SingleUserGroup);
             return true;
         }
         return false;
@@ -1165,6 +1221,7 @@ class DetailsConfig {
     private bool   m_FullMPAA              = true;
     private bool   m_RussianPR             = false;
     private bool   m_fullTriviaError       = false;
+    private bool   m_tmdbGroups            = false;
     
     private static DetailsConfig m_detailsConfig = null;
 
@@ -1231,12 +1288,16 @@ class DetailsConfig {
             return m_ratingSource;
         }
     }
+    public bool TMDBGroups {
+        get {
+            return m_tmdbGroups;
+        }
+    }
     public static DetailsConfig GetInstance() {
         if (m_detailsConfig == null) {
             m_detailsConfig = new DetailsConfig();
             m_detailsConfig.Load();
         }
-        
         return m_detailsConfig;
     }
     
@@ -1300,6 +1361,10 @@ class DetailsConfig {
                 node = root.SelectSingleNode("//details/fullTriviaError");
                 if (node != null && node.FirstChild != null) {
                     m_fullTriviaError = "true".Equals(node.FirstChild.Value.ToLower());
+                }
+                node = root.SelectSingleNode("//details/tmdbGroups");
+                if (node != null && node.FirstChild != null) {
+                    m_tmdbGroups = "true".Equals(node.FirstChild.Value.ToLower());
                 }
             }
         } 
