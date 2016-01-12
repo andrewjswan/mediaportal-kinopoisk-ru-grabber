@@ -15,8 +15,8 @@ using System.Collections;
 
 internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 {
-  const string strKinopoiskVersion = "20140721.01 by ajs";
-  
+  const string strKinopoiskVersion = "20160112.01 by ajs";
+
   private string _strBody = string.Empty;
 
   #region ActorMoviesDetails
@@ -345,7 +345,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
     catch (Exception ex)
     {
-      Log.Error("exception for imdb lookup of {0} err:{1} stack:{2}", strURL, ex.Message, ex.StackTrace);
+      MediaPortal.GUI.Library.Log.Error("exception for imdb lookup of {0} err:{1} stack:{2}", strURL, ex.Message, ex.StackTrace);
     }
     return elements;
   }
@@ -657,7 +657,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
       parser.resetPosition();
 
-      if (parser.skipToEndOf("<a href=\"bio?ref_=m_mn_ov_bio\" class=\"btn-full\" > <p>") &&
+      // if (parser.skipToEndOf("<a href=\"bio?ref_=m_mn_ov_bio\" class=\"btn-full\" > <p>") &&
+      if (parser.skipToEndOf("<a href=\"bio?ref_=m_mn_ov_bio\"\nclass=\"btn-full\" > <p>") &&
         parser.extractTo("</p>", ref value))
       {
         value = new HTMLUtil().ConvertHTMLToAnsi(value);
@@ -803,7 +804,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
     catch (Exception ex)
     {
-      Log.Error("CSScript GetActorDetails({0} exception:{1} {2} {3}", url.URL, ex.Message,
+      MediaPortal.GUI.Library.Log.Error("CSScript GetActorDetails({0} exception:{1} {2} {3}", url.URL, ex.Message,
         ex.Source, ex.StackTrace);
     }
     return false;
@@ -829,7 +830,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     // Get films and roles block
     if (!parser.skipToEndOf("<section id=\"name-filmo-content\">"))
     {
-      Log.Error("GetActorMovies(): HTMLparser content is empty.");
+      MediaPortal.GUI.Library.Log.Error("GetActorMovies(): HTMLparser content is empty.");
     }
     else
     {
@@ -1152,7 +1153,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
           string strActorName = string.Empty;
           strActorName = m.Groups["actor"].Value;
           strActorName = Utils.stripHTMLtags(strActorName).Trim();
-          
+
           string strKActorName = GetActorKinopiskName(strActorName);
           if (strKActorName != string.Empty)
           {
@@ -1323,8 +1324,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         // req.Headers.Add("Accept-Language", "en-US,en;q=0.5");
         req.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
         req.Proxy.Credentials = CredentialCache.DefaultCredentials;
-        req.Timeout = 10000;
-        req.ReadWriteTimeout = req.Timeout;
+        req.Timeout = 20000;
+        req.ReadWriteTimeout  = req.Timeout;
       }
       catch (Exception) { }
       result = req.GetResponse();
@@ -1341,7 +1342,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
     catch (Exception ex)
     {
-      Log.Error("InternalActorsScriptGrabber Error retrieving WebPage: {0} err:{1}", strUrl, ex.Message);
+      MediaPortal.GUI.Library.Log.Error("InternalActorsScriptGrabber Error retrieving WebPage: {0} err:{1}", strUrl, ex.Message);
     }
     finally
     {
@@ -1391,7 +1392,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         req.UserAgent         = "Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)";
         req.Accept            = "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
         req.Referer           = "http:\\www.kinopoisk.ru";
-        req.Timeout           = 10000;
+        req.Timeout           = 20000;
         req.ReadWriteTimeout  = req.Timeout;
         req.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
       }
