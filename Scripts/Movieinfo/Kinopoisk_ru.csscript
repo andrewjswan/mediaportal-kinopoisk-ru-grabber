@@ -16,10 +16,11 @@ using System.Xml;
 using MediaPortal.GUI.Library;
 using MediaPortal.Util;
 using MediaPortal.Common.Utils;
+using MediaPortal.Video.Database;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20160112.01 by ajs";
+    const string strKinopoiskVersion = "20160113.01 by ajs";
 
     public Grabber()
     {
@@ -627,21 +628,27 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
               if (tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
               {
                 string tmdbJSON      = Regex.Match(tmdbPage, @"belongs_to_collection.+?{[^}]+?}", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
-                string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\"";
+                // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\"";
+                string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\"";
                 MatchCollection mcLs = Regex.Matches(tmdbJSON, matchLists);
-                DebugLog(detailsConfig.Debug, "Movie groups JSON: {0}", tmdbJSON);
-                DebugLog(detailsConfig.Debug, "Movie groups Count: {0}", mcLs.Count);
-                
+               
                 if (mcLs.Count != 0)
                 {
                   foreach (Match mL in mcLs)
                   {
                     string strL = string.Empty;
+                    string strP = string.Empty;
                     strL = mL.Groups["Collection"].Value;
+                    strP = mL.Groups["Poster"].Value;
 
                     if (!string.IsNullOrEmpty(strL))
                     {
                       movieDetails.SingleUserGroup += (string.IsNullOrEmpty(movieDetails.SingleUserGroup) ? "" : "|") + strL;
+                      if (!string.IsNullOrEmpty(strP) && detailsConfig.TMDBGroupsPoster)
+                      {
+                        strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
+                        IMDBFetcher.DownloadCoverArt(Thumbs.MovieUserGroups , strP, strL);
+                      }
                     }
                   }
                 }
@@ -877,7 +884,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
         if (!string.IsNullOrEmpty(rx_strip)) 
         {
           searchString = Regex.Replace(searchString, rx_strip, string.Empty, RegexOptions.IgnoreCase);
-          Log.Debug("Kinopoisk.ru strip regexp: {0} -> {1}", rx_strip, searchString);
+          // Log.Debug("Kinopoisk.ru strip regexp: {0} -> {1}", rx_strip, searchString);
         }
         rx_strip = @"[\s]+";
         searchString = Regex.Replace(searchString, rx_strip, " ", RegexOptions.IgnoreCase).Trim();
@@ -1018,11 +1025,13 @@ class WebSession {
                 request.UserAgent        = "Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)";
                 // request.UserAgent       = "Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.186 Safari/535.1";    
                 // request.UserAgent       = "Mozilla/8.0 (compatible; MSIE 9.0; Windows NT 6.1; .NET CLR 1.0.3705;)";
-                request.Accept           = "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
+                request.Accept           = "text/xml,application/xml,application/xhtml+xml,application/json,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
                 request.Referer          = "http:\\www.kinopoisk.ru";
                 request.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
-                if (networkConfig.noCache) 
+                if (networkConfig.noCache)
+                { 
                     request.Headers.Add("Pragma: no-cache");
+                }
                 request.Timeout          = timeout + (timeoutIncrement * tryCount);
                 request.ReadWriteTimeout = request.Timeout;
                 request.CookieContainer  = new CookieContainer();
@@ -1222,6 +1231,7 @@ class DetailsConfig {
     private bool   m_RussianPR             = false;
     private bool   m_fullTriviaError       = false;
     private bool   m_tmdbGroups            = false;
+    private bool   m_tmdbGroupsPoster      = false;
     
     private static DetailsConfig m_detailsConfig = null;
 
@@ -1291,6 +1301,11 @@ class DetailsConfig {
     public bool TMDBGroups {
         get {
             return m_tmdbGroups;
+        }
+    }
+    public bool TMDBGroupsPoster {
+        get {
+            return m_tmdbGroupsPoster;
         }
     }
     public static DetailsConfig GetInstance() {
@@ -1366,6 +1381,10 @@ class DetailsConfig {
                 if (node != null && node.FirstChild != null) {
                     m_tmdbGroups = "true".Equals(node.FirstChild.Value.ToLower());
                 }
+                node = root.SelectSingleNode("//details/tmdbGroupsPoster");
+                if (node != null && node.FirstChild != null) {
+                    m_tmdbGroupsPoster = "true".Equals(node.FirstChild.Value.ToLower());
+                }
             }
         } 
         catch (Exception e) {
@@ -1377,7 +1396,7 @@ class DetailsConfig {
 
 class NetworkConfig {
     private bool m_noCache = false;
-    private int  m_TimeOut = 3000;
+    private int  m_TimeOut = 20000;
     private int  m_TimeOutIncrement = 2000;
     private int  m_Retries = 3;
     
