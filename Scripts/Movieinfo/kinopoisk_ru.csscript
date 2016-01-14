@@ -629,7 +629,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
               {
                 string tmdbJSON      = Regex.Match(tmdbPage, @"belongs_to_collection.+?{[^}]+?}", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
                 // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\"";
-                string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\"";
+                // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\"";
+                string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\""+@".+?backdrop_path.:"+"\""+@"(?<Backdrop>.+?)"+"\"";
                 MatchCollection mcLs = Regex.Matches(tmdbJSON, matchLists);
                
                 if (mcLs.Count != 0)
@@ -638,16 +639,30 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   {
                     string strL = string.Empty;
                     string strP = string.Empty;
+                    string strB = string.Empty;
                     strL = mL.Groups["Collection"].Value;
                     strP = mL.Groups["Poster"].Value;
+                    strB = mL.Groups["Backdrop"].Value;
 
                     if (!string.IsNullOrEmpty(strL))
                     {
                       movieDetails.SingleUserGroup += (string.IsNullOrEmpty(movieDetails.SingleUserGroup) ? "" : "|") + strL;
-                      if (!string.IsNullOrEmpty(strP) && detailsConfig.TMDBGroupsPoster)
+                      if (detailsConfig.TMDBGroupsPoster)
                       {
-                        strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
-                        IMDBFetcher.DownloadCoverArt(Thumbs.MovieUserGroups , strP, strL);
+                        if (!string.IsNullOrEmpty(strP))
+                        {
+                          strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
+                          IMDBFetcher.DownloadCoverArt(Thumbs.MovieUserGroups , strP, strL);
+                        }
+                        if (!string.IsNullOrEmpty(strB))
+                        {
+                          strB = string.Format("http://image.tmdb.org/t/p/w1920/{0}", strB); // w500 or w1000 or w1280 or w1920 (image width)
+                          string fanartFilename = FanArt.SetFanArtFileName(strL, 0);
+                          if (!string.IsNullOrEmpty(fanartFilename) && !File.Exists(fanartFilename))
+                          {
+                            MediaPortal.Util.Utils.DownLoadImage(strB, fanartFilename);
+                          }
+                        }
                       }
                     }
                   }
