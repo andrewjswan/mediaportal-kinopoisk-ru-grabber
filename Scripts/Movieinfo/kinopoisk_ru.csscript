@@ -597,7 +597,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     detailRText = Normalize(detailRText);
                     detailRText = Utils.stripHTMLtags(detailRText);
                     DebugLog(detailsConfig.Debug, "Details: {0} - {1}", detailLText, detailRText);
-                    DetailsInfo += detailLText + " - " + detailRText + "\n"; 
+                    DetailsInfo += "- " + detailLText + " " + detailRText + "\n"; 
                   }
                 }
                 if (!string.IsNullOrEmpty(DetailsInfo))
