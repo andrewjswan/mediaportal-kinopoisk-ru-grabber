@@ -229,7 +229,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
       <Major>1</Major>
       <Minor>0</Minor>
       <Build>0</Build>
-      <Revision>100</Revision>
+      <Revision>110</Revision>
     </Version>
     <ExtensionDescription>Kinopoisk grabber for Mediaportal</ExtensionDescription>
     <VersionDescription>Fixes for studios and MP 1.17</VersionDescription>
@@ -304,7 +304,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>pack.icon.png</LocalFileName>
-        <ZipFileName>Installer{CopyFile}\{5641c1f7-db5d-469c-89ef-480f77861a64}-pack.icon.png</ZipFileName>
+        <ZipFileName>Installer{CopyFile}\{f0ad3f12-5fb3-40b5-9cbc-e2369c047987}-pack.icon.png</ZipFileName>
         <DestinationFilename />
       </FileItem>
     </Items>
