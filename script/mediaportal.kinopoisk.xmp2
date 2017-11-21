@@ -220,7 +220,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
   </PluginDependencies>
   <GeneralInfo>
     <Name>Kinopoisk grabber for Mediaportal</Name>
-    <Id>a54e4eba-bd35-44bb-a494-a272b49418cf</Id>
+    <Id>1dd1069f-4364-484e-84c6-91d3005d960e</Id>
     <Author>ajs</Author>
     <HomePage>https://github.com/andrewjswan/mediaportal-kinopoisk-ru-grabber</HomePage>
     <ForumPage>http://forum.team-mediaportal.com/threads/russian-kinopoisk-ru.93004/</ForumPage>
@@ -232,10 +232,10 @@ Click Next to continue or Cancel to exit Setup.</Value>
       <Revision>100</Revision>
     </Version>
     <ExtensionDescription>Kinopoisk grabber for Mediaportal</ExtensionDescription>
-    <VersionDescription />
+    <VersionDescription>Fixes for studios and MP 1.17</VersionDescription>
     <DevelopmentStatus>Stable</DevelopmentStatus>
     <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
-    <ReleaseDate>2016-05-21T13:46:50</ReleaseDate>
+    <ReleaseDate>2017-11-21T13:46:50</ReleaseDate>
     <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
     <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
     <Params>
@@ -304,7 +304,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>pack.icon.png</LocalFileName>
-        <ZipFileName>Installer{CopyFile}\{87e5cef9-93fa-40fa-aeff-8ce8373b1f51}-pack.icon.png</ZipFileName>
+        <ZipFileName>Installer{CopyFile}\{5641c1f7-db5d-469c-89ef-480f77861a64}-pack.icon.png</ZipFileName>
         <DestinationFilename />
       </FileItem>
     </Items>
