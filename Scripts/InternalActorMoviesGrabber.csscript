@@ -15,7 +15,7 @@ using System.Collections;
 
 internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 {
-  const string strKinopoiskVersion = "20160112.01 by ajs";
+  const string strKinopoiskVersion = "20180124.01 by ajs";
 
   private string _strBody = string.Empty;
 
@@ -1034,7 +1034,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
   {
     string absUri = string.Empty;
     ArrayList actorList = new ArrayList();
-    string movieURL = string.Format("http://www.imdb.com/title/{0}/combined", imdbMovieID);
+    // string movieURL = string.Format("http://www.imdb.com/title/{0}/combined", imdbMovieID);
+    string movieURL = string.Format("http://www.imdb.com/title/{0}/reference", imdbMovieID);
     string strBodyActors = GetPage(movieURL, "utf-8", out absUri);
 
     if (string.IsNullOrEmpty(strBodyActors))
@@ -1045,8 +1046,10 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     // Director
     string strDirectorImdbId = string.Empty;
     string strDirectorName = string.Empty;
-    string regexBlockPattern = @"name=""director[s]""(?<directors_block>.*?)<h5>";
-    string regexPattern = @"<a\s+href=""/name/(?<idDirector>nm\d{7})/""[^>]*>(?<movieDirectors>[^<]+)</a>";
+    // string regexBlockPattern = @"name=""director[s]""(?<directors_block>.*?)<h5>";
+    string regexBlockPattern = @"name=""directors?""(?<directors_block>[\s\S]+?)<h[45]\sname";
+    // string regexPattern = @"<a\s+href=""/name/(?<idDirector>nm\d{7})/""[^>]*>(?<movieDirectors>[^<]+)</a>";
+    string regexPattern = @"<a\s+href=""\/name\/(?<idDirector>nm\d{7})\/[^>]*>(?<movieDirectors>[^<]+)<\/a>";
     string regexBlock = Regex.Match(HttpUtility.HtmlDecode(strBodyActors),
       regexBlockPattern, RegexOptions.Singleline).Groups["directors_block"].Value;
     strDirectorImdbId = Regex.Match(regexBlock, regexPattern, RegexOptions.Singleline).Groups["idDirector"].Value;
@@ -1064,11 +1067,13 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
 
     //Writers
-    regexBlockPattern = @"<h5>Writer[s]?[^:]*:</h5>[^<]*(?<writers_block>.*?)</div>";
+    // regexBlockPattern = @"<h5>Writer[s]?[^:]*:</h5>[^<]*(?<writers_block>.*?)</div>";
+    regexBlockPattern = @"name=""writers?""(?<writers_block>[\s\S]+?)<h[45]\sname";
     regexBlock = Regex.Match(HttpUtility.HtmlDecode(strBodyActors),
       regexBlockPattern, RegexOptions.Singleline).Groups["writers_block"].Value;
 
-    regexPattern = @"href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>[^(]*(?<wrole>[^)]*\))|href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>(?<wrole>)";
+    // regexPattern = @"href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>[^(]*(?<wrole>[^)]*\))|href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>(?<wrole>)";
+    regexPattern = @"href=""\/name\/(?<imdbWriterId>nm\d{7})\/[^>]*>(?<writer>[^<]+)<\/a>(?:[^(]*?(?<wrole>\(as[^)]*\)))?";
     MatchCollection mc = Regex.Matches(regexBlock, regexPattern);
 
     if (mc.Count != 0)
@@ -1131,8 +1136,10 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
 
     // cast
-    regexBlockPattern = @"<table class=""cast"">.*?</table>|<table class=""cast_list"">.*?</table>";
-    regexPattern = @"<td[^<]*<a\s+href=""/name/(?<imdbActorID>nm\d{7})/""[^>]*>(?<actor>[^<]*)</a>.*?<td.class=""char"">(?<role>.*?)<*?</td>";
+    // regexBlockPattern = @"<table class=""cast"">.*?</table>|<table class=""cast_list"">.*?</table>";
+    regexBlockPattern = @"<table class=""cast_list"">[\s\S]+?<\/table>";
+    // regexPattern = @"<td[^<]*<a\s+href=""/name/(?<imdbActorID>nm\d{7})/""[^>]*>(?<actor>[^<]*)</a>.*?<td.class=""char"">(?<role>.*?)<*?</td>";
+    regexPattern = @"<td[^<]+?actor[^<]+?<a\s+href=""\/name\/(?<imdbActorID>nm\d{7})\/[^>]+?>[^>]+?name[^>]+?>(?<actor>[^<]*)<\/span>[\s\S]+?td class=.character.>(?<role>[\s\S]+?)<*?<\/td>";
     Match castBlock = Regex.Match(strBodyActors, regexBlockPattern, RegexOptions.Singleline);
     string strCastBlock = HttpUtility.HtmlDecode(castBlock.Value);
 

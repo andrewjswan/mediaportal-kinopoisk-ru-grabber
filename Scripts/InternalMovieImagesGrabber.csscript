@@ -253,7 +253,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
 
             if (!string.IsNullOrEmpty(strBd))
             {
-              strBd = string.Format("http://image.tmdb.org/t/p/w1920/{0}", strBd); // w500 or w1280 or w1920 (image width)
+              strBd = string.Format("http://image.tmdb.org/t/p/original/{0}", strBd);
               fanartList.Add(strBd);
             }
           }
@@ -354,7 +354,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       foreach (Match cover in covers)
       {
         string coverUrl = string.Empty;
-        coverUrl = string.Format("http://image.tmdb.org/t/p/w1000/{0}",cover.Groups["cover"].Value);
+        coverUrl = string.Format("http://image.tmdb.org/t/p/w780/{0}",cover.Groups["cover"].Value);
         imageList.Add(coverUrl);
       }
 
@@ -372,7 +372,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       foreach (Match cover in covers)
       {
         string coverUrl = string.Empty;
-        coverUrl = string.Format("http://image.tmdb.org/t/p/w1000/{0}", cover.Groups["cover"].Value);
+        coverUrl = string.Format("http://image.tmdb.org/t/p/w780/{0}", cover.Groups["cover"].Value);
         imageList.Add(coverUrl);
       }
     }
@@ -398,7 +398,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
     foreach (Match actorImage in actorImages)
     {
       string actor = string.Empty;
-      actor = string.Format("http://image.tmdb.org/t/p/w1000/{0}", actorImage.Groups["cover"].Value);
+      actor = string.Format("http://image.tmdb.org/t/p/original/{0}", actorImage.Groups["cover"].Value);
       actorThumbs.Add(actor);
     }
 

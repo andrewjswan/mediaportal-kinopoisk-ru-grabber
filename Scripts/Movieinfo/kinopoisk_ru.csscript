@@ -21,7 +21,7 @@ using MediaPortal.Video.Database;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20171121.01 by ajs";
+    const string strKinopoiskVersion = "20180131.01 by ajs";
 
     public Grabber()
     {
@@ -155,13 +155,16 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
         // IMDB MovieID
         movieDetails.IMDBNumber =  ParseSingleValue(url.URL, rx_movie_id, "imdbID", true);
         // URL
-        // url.URL = "http://www.kinopoisk.ru/level/1/film/"+movieID+"/view_info/ok/";
-        url.URL = "http://www.kinopoisk.ru/film/"+movieID+"/view_info/fact/";
+        // url.URL = "https://www.kinopoisk.ru/level/1/film/"+movieID+"/view_info/ok/";
+        url.URL = "https://www.kinopoisk.ru/film/"+movieID+"/view_info/fact/";
         // url.URL = "https://www.kinopoisk.ru/film/"+movieID+"/view_info/fact/";
         DebugLog(detailsConfig.Debug, "URL: {0} {1} {2}", movieID, movieDetails.IMDBNumber, url.URL);
         
-        WebSession webSession = new WebSession();
-        if (webSession.Retrieve(url.URL, Encoding.GetEncoding("windows-1251"), out detailsPage)) { // utf-8
+        WebSession kinopoiskSession = new WebSession();
+        WebSession imdbSession = new WebSession();
+        WebSession tmdbSession = new WebSession();
+        if (kinopoiskSession.Retrieve(url.URL, "https://www.kinopoisk.ru/", Encoding.GetEncoding("windows-1251"), out detailsPage)) 
+        {
             // Alternate Title
             // string rx_alternate_title = @"color: #666; font-size: 13px[^>]+>(?<movieAlternate>[^<]+)";
             string rx_alternate_title = @"itemprop=.alternativeHeadline.>(?<movieAlternate>[^<]+)";
@@ -204,8 +207,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
               string omdbSearch = @"media-body[^<]+?<h1>(?<Title>[^<]+?)<(?:[^\(]+?\((?<Year>\d{4})\)?[^<]+?<[^<]+?<)?\/h1>";
               string omdbPage   = string.Empty;
               DebugLog(detailsConfig.Debug, "IMDB: URL {0}", omdbUrl);
-              WebSession omdbWebSession = new WebSession();
-              if (omdbWebSession.Retrieve(omdbUrl, null, out omdbPage)) 
+              // WebSession omdbWebSession = new WebSession();
+              if (/*omdbWebSession*/imdbSession.Retrieve(omdbUrl, null, out omdbPage)) 
               {
                 omdbTitle = ParseSingleValue(omdbPage, omdbSearch, "Title", true);
                 omdbYear = ParseSingleValue(omdbPage, omdbSearch, "Year", true);
@@ -236,15 +239,17 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.WritingCredits = ConvertListToString(writers, ", ", 0);
             
             // Awards
-            movieDetails.UserReview     = string.Empty;
+            // movieDetails.UserReview     = string.Empty;
+            movieDetails.MovieAwards    = string.Empty; // MP1-4846
             if (detailsConfig.MovieAwards) 
             {         
-              string _awardsURL        = string.Format("http://www.kinopoisk.ru/film/{0}/awards/", movieID);
+              DebugLog(detailsConfig.Debug, "Awards from Kinopoisk...");
+              string _awardsURL        = string.Format("https://www.kinopoisk.ru/film/{0}/awards/", movieID);
               // string _awardsURL        = string.Format("https://www.kinopoisk.ru/film/{0}/awards/", movieID);
               string _awardsPage       = string.Empty;
               string _awardsList       = string.Empty;
-              WebSession awardsSession = new WebSession();
-              if (awardsSession.Retrieve(_awardsURL, null, out _awardsPage)) 
+              // WebSession awardsSession = new WebSession();
+              if (/*awardsSession*/kinopoiskSession.Retrieve(_awardsURL, url.URL, Encoding.GetEncoding("windows-1251"), out _awardsPage)) 
               {
                 if (!string.IsNullOrEmpty(_awardsPage)) 
                 {
@@ -404,17 +409,200 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 // movieDetails.UserReview = _awardsList + "\n";
                 movieDetails.MovieAwards = _awardsList; // MP1-4846
               }
+
+              // Awards from IMDB
+              if (string.IsNullOrEmpty(movieDetails.MovieAwards) || movieDetails.MovieAwards == "unknown")
+              {
+                DebugLog(detailsConfig.Debug, "Awards from IMDB...");
+                // Awards MP1-4846
+                try
+                {
+                  string _awardsIMDBURL  = string.Format("http://www.imdb.com/title/{0}/awards", movieDetails.IMDBNumber);
+                  string _awardsIMDBPage = string.Empty;
+                  string _awardsIMDBList = string.Empty;
+
+                  if (imdbSession.Retrieve(_awardsIMDBURL, null, out _awardsIMDBPage)) 
+                  {
+                    if (!string.IsNullOrEmpty(_awardsIMDBPage)) 
+                    {
+                      string rx_awards_mainblock  = @"<h3>(?<award>[^<]+?)<a href=..event[^>]+?class=.event_year[^>]+?>(?<awardyear>[^<]+?)<(?<block>[\s\S]+?)<\/table>";
+                      string rx_awards_listWblock = @"<tr>[\s\S]+?>^(?!Nominated)|(Won)<\/b(?<block>[\s\S]+?)<\/tr";
+                      string rx_awards_listNblock = @"<tr>[\s\S]+?>^(?!Won)|(Nominated)<\/b(?<block>[\s\S]+?)<\/tr";
+                      string rx_awards_line       = @"award_category.>(?<award>[^<]+?)<[\s\S]+?award_description.>(?<what>[^<]+?)(?:<br.?\/>)?(?<who><[\s\S]+?)<\/td>";
+                      _awardsPage = HttpUtility.HtmlDecode(_awardsIMDBPage);
+
+                      ArrayList awardsList = Parse(_awardsIMDBPage, rx_awards_mainblock);
+                      if (awardsList != null && awardsList.Count > 0) 
+                      {
+                        for(int i = 0; i < awardsList.Count; i++) 
+                        {
+                          Hashtable awardMain   = (Hashtable)awardsList[i];
+                          string awardMainName  = (string)awardMain["award"]+" "+(string)awardMain["awardyear"];
+                          string awardMainBlock = (string)awardMain["block"];
+                          awardMainName = awardMainName.Trim().Replace("\n", "");
+                          // awardMainName = Regex.Replace(awardMainName, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                          awardMainName = Utils.stripHTMLtags(awardMainName);
+
+                          if (!string.IsNullOrEmpty(awardMainBlock))
+                          {
+                            // _awardsIMDBList = (string.IsNullOrEmpty(_awardsIMDBList) ? "Won:\n" : _awardsIMDBList) + awardMainName + "\n"; 
+                            _awardsIMDBList = _awardsIMDBList + "* " + awardMainName + "\n"; 
+                            // Winner
+                            ArrayList awardsWList = Parse(awardMainBlock, rx_awards_listWblock);
+                            if (awardsWList != null && awardsWList.Count > 0) 
+                            {
+                              for(int k = 0; k < awardsWList.Count; k++) 
+                              {
+                                Hashtable awardWMain   = (Hashtable)awardsWList[k];
+                                string awardWMainBlock = (string)awardWMain["block"];
+                                if (!string.IsNullOrEmpty(awardWMainBlock))
+                                {
+                                  _awardsIMDBList = _awardsIMDBList + "Won:\n";
+                                  ArrayList awardsWListLines = Parse(awardWMainBlock, rx_awards_line);
+                                  if (awardsWListLines != null && awardsWListLines.Count > 0) 
+                                  {
+                                    for(int j = 0; j < awardsWListLines.Count; j++) 
+                                    {
+                                      Hashtable awardLine  = (Hashtable)awardsWListLines[j];
+                                      string awardLineName = (string)awardLine["award"];
+                                      string awardLineWho  = (string)awardLine["who"];
+                                      string awardLineWhat = (string)awardLine["what"];
+                                      if (!string.IsNullOrEmpty(awardLineName))
+                                      {
+                                        awardLineName = awardLineName.Trim().Replace("\n", "");
+                                        // awardLineName = Regex.Replace(awardLineName, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineName = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineWho))
+                                      {
+                                        awardLineWho = awardLineWho.Trim().Replace("\n", "").Replace("</a>", ", ");
+                                        // awardLineWho = Regex.Replace(awardLineWho, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineWho = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineWhat))
+                                      {
+                                        awardLineWhat = awardLineWhat.Trim().Replace("\n", "");
+                                        // awardLineWhat = Regex.Replace(awardLineWhat, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineWhat = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineName))
+                                      {
+                                        _awardsIMDBList = _awardsIMDBList + "- " +awardLineName + (string.IsNullOrEmpty(awardLineWho) ? "" : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? "" : " - " + awardLineWhat) + "\n";
+                                        DebugLog(detailsConfig.Debug, "Award (W): {0} - {1} {2} {3}", awardMainName, awardLineName,awardLineWho,awardLineWhat);
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                            // Nominate
+                            ArrayList awardsNList = Parse(awardMainBlock, rx_awards_listNblock);
+                            if (awardsNList != null && awardsNList.Count > 0) 
+                            {
+                              for(int k = 0; k < awardsNList.Count; k++) 
+                              {
+                                Hashtable awardNMain   = (Hashtable)awardsNList[k];
+                                string awardNMainBlock = (string)awardNMain["block"];
+                                if (!string.IsNullOrEmpty(awardNMainBlock))
+                                {
+                                  _awardsIMDBList = _awardsIMDBList + "Nominated:\n";
+                                  ArrayList awardsNListLines = Parse(awardNMainBlock, rx_awards_line);
+                                  if (awardsNListLines != null && awardsNListLines.Count > 0) 
+                                  {
+                                    for(int j = 0; j < awardsNListLines.Count; j++) 
+                                    {
+                                      Hashtable awardLine  = (Hashtable)awardsNListLines[j];
+                                      string awardLineName = (string)awardLine["award"];
+                                      string awardLineWho  = (string)awardLine["who"];
+                                      string awardLineWhat = (string)awardLine["what"];
+                                      if (!string.IsNullOrEmpty(awardLineName))
+                                      {
+                                        awardLineName = awardLineName.Trim().Replace("\n", "");
+                                        // awardLineName = Regex.Replace(awardLineName, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineName = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineWho))
+                                      {
+                                        awardLineWho = awardLineWho.Trim().Replace("\n", "").Replace("</a>", ", ");
+                                        // awardLineWho = Regex.Replace(awardLineWho, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineWho = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineWhat))
+                                      {
+                                        awardLineWhat = awardLineWhat.Trim().Replace("\n", "");
+                                        // awardLineWhat = Regex.Replace(awardLineWhat, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                                      }
+                                      else
+                                      {
+                                        awardLineWhat = string.Empty;
+                                      }
+                                      if (!string.IsNullOrEmpty(awardLineName))
+                                      {
+                                        _awardsIMDBList = _awardsIMDBList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? "" : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? "" : " - " + awardLineWhat) + "\n";
+                                        MediaPortal.GUI.Library.Log.Debug("Award (N): {0} - {1} {2} {3}", awardMainName, awardLineName,awardLineWho,awardLineWhat);
+                                        DebugLog(detailsConfig.Debug, "Award (N): {0} - {1} {2} {3}", awardMainName, awardLineName,awardLineWho,awardLineWhat);
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                  if (!string.IsNullOrEmpty(_awardsIMDBList))
+                  {
+                    movieDetails.MovieAwards = _awardsIMDBList; // MP1-4846
+                  }
+                }
+                catch (Exception ex)
+                {
+                  MediaPortal.GUI.Library.Log.Error("Kinopoisk Script GetAwards from IMDB error: {0}", ex.Message);
+                }
+              }
             }
 
             // Review (Trivia)
+            movieDetails.UserReview    = string.Empty;
             string triviaPage          = detailsPage;
             if (detailsConfig.MovieFullTriviaError) {         
-              string _triviaURL        = string.Format("http://www.kinopoisk.ru/film/{0}/view_info/blooper/", movieID);
+              string _triviaURL        = string.Format("https://www.kinopoisk.ru/film/{0}/view_info/blooper/", movieID);
               // string _triviaURL        = string.Format("https://www.kinopoisk.ru/film/{0}/view_info/blooper/", movieID);
               string _triviaPage       = string.Empty;
-              WebSession triviaSession = new WebSession();
-              if (triviaSession.Retrieve(_triviaURL, null, out _triviaPage)) {
-                if (!string.IsNullOrEmpty(_triviaPage)) {
+              // WebSession triviaSession = new WebSession();
+              if (/*triviaSession*/kinopoiskSession.Retrieve(_triviaURL, url.URL, Encoding.GetEncoding("windows-1251"), out _triviaPage)) 
+              {
+                if (!string.IsNullOrEmpty(_triviaPage)) 
+                {
                   triviaPage = _triviaPage;  
                 }
               }
@@ -457,10 +645,9 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 movieDetails.UserReview += "- "+triviaText+"\n"; 
               }
             }
-          	movieDetails.UserReview += "\n---------------------------------"; 
-          	movieDetails.UserReview += "\nIMDB: "+imdbDetails; 
-          	movieDetails.UserReview += "\nKinopoisk: "+movieID+" "+movieTitle+" ("+movieDetails.Year+")"; 
-          	movieDetails.UserReview += "\n\n";
+            movieDetails.UserReview += "\n---------------------------------"; 
+            movieDetails.UserReview += "\nIMDB: "+imdbDetails; 
+            movieDetails.UserReview += "\nKinopoisk: "+movieID+" "+movieTitle+" ("+movieDetails.Year+")"; 
 
             // Genres
             //string rx_genre_block = @"жанр</td><[^>]+>(?<movieGenres>[^\n]+)";
@@ -478,6 +665,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.Plot = movieDetails.PlotOutline = Normalize(ParseSingleValue(detailsPage, rx_description, "movieDescription", true));
             
             // Certification
+            movieDetails.MPAAText = string.Empty;
+
             // string rx_certification         = @"src=.http://st.kinopoisk.ru/images/mpaa/(?<movieRating>[^\.]+)\.gif";
             string rx_certification         = @"src=.+?images/mpaa/(?<movieRating>[^\.]+)\.gif";
             string rx_certification_text    = @"mpaa/.*?[^<>]+<span[^>]+>(?<MPAAText>[^<]+)<" ;
@@ -502,24 +691,29 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             }
             if (detailsConfig.FullMPAA) 
             {
-                movieDetails.MPARating = FullMPARating;
-                Log.Info("MPAA : {0}", movieDetails.MPARating);
-            } else {
-                if (string.IsNullOrEmpty(MPARating) || (!string.IsNullOrEmpty(MPARating) && detailsConfig.RussianPR && !string.IsNullOrEmpty(RARatingValue))) {
-                    movieDetails.MPARating = RARatingValue;
-                } else {
-                    movieDetails.MPARating = MPARating;
-                }
-                Log.Info("MPAA : {0} ({1})", movieDetails.MPARating, FullMPARating.Replace("\n"," "));
-                
-                if (detailsConfig.AddTextRatingToPlot && !string.IsNullOrEmpty(FullMPARating))
-                {
-                  movieDetails.Plot += "\n\n"+FullMPARating;
-                }
-                if (!string.IsNullOrEmpty(FullMPARating))
-                {
-                  movieDetails.MPAAText = FullMPARating.Trim().Replace("\n", "\r"); // MP1-4846
-                }
+              movieDetails.MPARating = FullMPARating;
+              Log.Info("MPAA : {0}", movieDetails.MPARating);
+            } 
+            else 
+            {
+              if (string.IsNullOrEmpty(MPARating) || (!string.IsNullOrEmpty(MPARating) && detailsConfig.RussianPR && !string.IsNullOrEmpty(RARatingValue))) 
+              {
+                movieDetails.MPARating = RARatingValue;
+              } 
+              else 
+              {
+                movieDetails.MPARating = MPARating;
+              }
+              Log.Info("MPAA : {0} ({1})", movieDetails.MPARating, FullMPARating.Replace("\n"," "));
+              
+              if (detailsConfig.AddTextRatingToPlot && !string.IsNullOrEmpty(FullMPARating))
+              {
+                movieDetails.Plot += "\n\n"+FullMPARating;
+              }
+              if (!string.IsNullOrEmpty(FullMPARating))
+              {
+                movieDetails.MPAAText = FullMPARating.Trim().Replace("\n", (detailsConfig.FullMPAAIMDBText ? "\n" : "\r")); // MP1-4846
+              }
             }
 
             // Runtime
@@ -546,14 +740,17 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             movieDetails.Studios = string.Empty;
 
             // Studios from Kinopoisk.ru
-            string studioURL         = string.Format("http://www.kinopoisk.ru/film/{0}/studio/", movieID);
+            string studioURL         = string.Format("https://www.kinopoisk.ru/film/{0}/studio/", movieID);
             // string studioURL         = string.Format("https://www.kinopoisk.ru/film/{0}/studio/", movieID);
             string studioPage        = string.Empty;
-            WebSession studioSession = new WebSession();
-            if (studioSession.Retrieve(studioURL, null, out studioPage)) 
+            // WebSession studioSession = new WebSession();
+            if (/*studioSession*/kinopoiskSession.Retrieve(studioURL, url.URL, Encoding.GetEncoding("windows-1251"), out studioPage)) 
             {
-                string rx_studio_block = @"Производство:(?<movieStudios>.+?)</table>";
-                string rx_studios      = @"left>(?<movieStudio>.+?)</td";
+                // Log.Debug("Kinopoisk Studios Page: {0}", studioPage);
+                // File.WriteAllText("C:\\ProgramData\\Team MediaPortal\\MediaPortal\\log\\page.txt", studioPage);
+                // string rx_studio_block = @"Производство:(?<movieStudios>.+?)</table>";
+                string rx_studio_block = @"Производство:(?<movieStudios>[\s\S]+?)<\/table>";
+                string rx_studios      = @"left>(?<movieStudio>[\s\S]+?)<\/td";
                 
                 string studioBlock     = ParseSingleValue(studioPage, rx_studio_block, "movieStudios", false);
                 ArrayList studiosList  = Parse(studioBlock, rx_studios);
@@ -572,8 +769,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     studios   += studioText + " / "; 
                   }
                 }
-                rx_studio_block = @"Прокат:(?<movieStudios>.+?)</table>";
-                rx_studios      = @"left[^<]+?>(?<movieStudio>.+?)<br";
+                rx_studio_block = @"Прокат:(?<movieStudios>[\s\S]+?)<\/table>";
+                rx_studios      = @"left[^<]+?>(?<movieStudio>[\s\S]+?)<br";
                 
                 studioBlock     = ParseSingleValue(studioPage, rx_studio_block, "movieStudios", false);
                 studiosList     = Parse(studioBlock, rx_studios);
@@ -588,13 +785,14 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     studioText = Regex.Replace(studioText, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
                     studioText = Normalize(studioText);
                     studioText = Utils.stripHTMLtags(studioText);
-                    studios   += studioText.Replace(", ", string.Empty) + " / "; 
+                    studios   += studioText.Replace(", ", " ") + " / "; 
                   }
                 }
 
                 if (!string.IsNullOrEmpty(studios))
                 {
                   movieDetails.Studios = studios.Remove(studios.LastIndexOf(" / "));
+                  Log.Debug("Kinopoisk Studios: {0}", movieDetails.Studios);
                 }
 
                 // Details about Movie
@@ -636,8 +834,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
               string aiimdbURL  = string.Format("http://www.imdb.com/title/{0}", movieDetails.IMDBNumber);
               string aiimdbPage = string.Empty;
 
-              WebSession aiimdbSession = new WebSession();
-              if (aiimdbSession.Retrieve(aiimdbURL, Encoding.GetEncoding("UTF-8"), out aiimdbPage)) 
+              // WebSession aiimdbSession = new WebSession();
+              if (/*aiimdbSession*/imdbSession.Retrieve(aiimdbURL, Encoding.GetEncoding("UTF-8"), out aiimdbPage)) 
               {
                 string regexBlockPattern = string.Empty;
                 string regexPattern = string.Empty;
@@ -655,13 +853,13 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
 
                     foreach (Match ms in mcStudios)
                     {
-                      studio = studio + Utils.stripHTMLtags(ms.Groups["movieStudios"].Value).Replace(", ", string.Empty) + " / ";
+                      studio = studio + Utils.stripHTMLtags(ms.Groups["movieStudios"].Value).Replace(", ", " ") + " / ";
                     }
 
                     if (!string.IsNullOrEmpty(studio))
                     {
                       movieDetails.Studios = HtmlDecode(studio.Remove(studio.LastIndexOf(" / ")));
-                      Log.Debug("Studios: {0}", movieDetails.Studios);
+                      Log.Debug("IMDB Studios: {0}", movieDetails.Studios);
                     }
                 }
 
@@ -683,10 +881,22 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   movieDetails.Language = HtmlDecode(languages.Remove(languages.LastIndexOf(", ")));
                   Log.Debug("Languages: {0}", movieDetails.Language);
                 }
+              }
 
+              string MPAAimdbURL  = string.Format("http://www.imdb.com/title/{0}/parentalguide", movieDetails.IMDBNumber);
+              string MPAAimdbPage = string.Empty;
+              // WebSession MPAAimdbSession = new WebSession();
+              if (!/*MPAAimdbSession*/imdbSession.Retrieve(MPAAimdbURL, Encoding.GetEncoding("UTF-8"), out MPAAimdbPage)) 
+              {
+                MPAAimdbPage = string.Empty; 
+              }
+
+              if (!string.IsNullOrEmpty(MPAAimdbPage))
+              {
                 // MPAA Description
-                regexPattern = @"MPAA[\s\S]+?(contentRating|info-content).>(?<CertDesc>[^<]+?)<";
-                string CertDescription = Regex.Match(aiimdbPage, regexPattern).Groups["CertDesc"].Value;
+                // regexPattern = @"MPAA[\s\S]+?(contentRating|info-content).>(?<CertDesc>[^<]+?)<";
+                string regexPattern = @"mpaa-rating[\s\S]+?MPAA<\/td[^<]+?<td>(?<CertDesc>[^<]+?)<";
+                string CertDescription = Regex.Match(MPAAimdbPage, regexPattern).Groups["CertDesc"].Value;
                 if (!string.IsNullOrEmpty(CertDescription)) 
                 {
                   if (detailsConfig.AddTextRatingToPlot)
@@ -695,7 +905,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   }
                   if (!string.IsNullOrEmpty(movieDetails.MPAAText))  // MP1-4846
                   {
-                    movieDetails.MPAAText = CertDescription.Replace("\n"," ") + "\r" + movieDetails.MPAAText;
+                    movieDetails.MPAAText = CertDescription.Replace("\n"," ") + (detailsConfig.FullMPAAIMDBText ? "\n" : "\r") + movieDetails.MPAAText;
                   }
                   else
                   {
@@ -704,23 +914,67 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   Log.Debug("MPAA Description: {0}", CertDescription.Replace("\n"," "));
                 }
               }
-            }
 
-            // UK Certification from IMDB
-            if (!string.IsNullOrEmpty(movieDetails.IMDBNumber) && (string.IsNullOrEmpty(movieDetails.MPARating))) 
-            {
-              string MPAAimdbURL  = string.Format("http://www.imdb.com/title/{0}/parentalguide#certification", movieDetails.IMDBNumber);
-              string MPAAimdbPage = string.Empty;
-
-              WebSession MPAAimdbSession = new WebSession();
-              if (MPAAimdbSession.Retrieve(MPAAimdbURL, Encoding.GetEncoding("UTF-8"), out MPAAimdbPage)) 
+              // MPAA Certification Text from IMDB
+              if (detailsConfig.FullMPAAIMDBText && !string.IsNullOrEmpty(MPAAimdbPage))
               {
-                  string regexPattern = @"href=./search/title[^>]+>UK:(?<Cert>[^<]+)</a>";
-                  string Certificate  = Regex.Match(MPAAimdbPage, regexPattern).Groups["Cert"].Value;
+                string MPAADesc       = string.Empty;
+                string rx_mpaa_block  = @"section.id=.advisory\-(?!spoiler[s\-])(?<block>[\s\S]+?)<\/section";
+                string rx_mpaa_header = @"h4.class=.ipl-list-title.>(?<header>[^<]+?)<\/h4";
+                string rx_mpaa_line   = @"li.class=.ipl-zebra-list[^>]+?>(?<text>[\s\S]+?)<div class=";
+
+                ArrayList mpaaList = Parse(MPAAimdbPage, rx_mpaa_block);
+                if (mpaaList != null && mpaaList.Count > 0) 
+                {
+                  for(int i = 0; i < mpaaList.Count; i++) 
+                  {
+                    Hashtable mpaaMain   = (Hashtable)mpaaList[i];
+                    string mpaaMainBlock = (string)mpaaMain["block"];
+                    if (!string.IsNullOrEmpty(mpaaMainBlock))
+                    {
+                      string mpaaHeader  = Regex.Match(mpaaMainBlock, rx_mpaa_header).Groups["header"].Value;
+                      ArrayList mpaaLines = Parse(mpaaMainBlock, rx_mpaa_line);
+                      if (mpaaLines != null && mpaaLines.Count > 0) 
+                      {
+                        MPAADesc = MPAADesc + "* " + mpaaHeader + "\n";
+                        for(int j = 0; j < mpaaLines.Count; j++) 
+                        {
+                          Hashtable mpaaLine  = (Hashtable)mpaaLines[j];
+                          string mpaaLineText = (string)mpaaLine["text"];
+                          if (!string.IsNullOrEmpty(mpaaLineText) && !Regex.IsMatch(mpaaLineText,@"\d+?\/\d+?"))
+                          {
+                            mpaaLineText = mpaaLineText.Trim().Replace("\n", "");
+                            mpaaLineText = Regex.Replace(mpaaLineText, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8));
+                            mpaaLineText = Utils.stripHTMLtags(mpaaLineText);
+                            mpaaLineText = Normalize(mpaaLineText).Trim();
+                            MPAADesc = MPAADesc + mpaaLineText + "\n";
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+                
+                if (!string.IsNullOrEmpty(MPAADesc))
+                {
+                  movieDetails.MPAAText = movieDetails.MPAAText + "\n\n" + MPAADesc;
+                  Log.Debug("MPAA Text: {0}", MPAADesc.Replace("\n"," "));
+                }
+              }
+
+              // UK Certification from IMDB
+              if (string.IsNullOrEmpty(movieDetails.MPARating) && !string.IsNullOrEmpty(MPAAimdbPage))
+              {
+                string regexPattern = @"href=./search/title[^>]+>UK:(?<Cert>[^<]+)</a>";
+                string Certificate  = Regex.Match(MPAAimdbPage, regexPattern).Groups["Cert"].Value;
+                if (!string.IsNullOrEmpty(Certificate))
+                {
                   movieDetails.MPARating = Certificate;
                   Log.Info("MPAA UK: {0}", movieDetails.MPARating);
+                }
               }
             }
+
             // Add Description Delimeter to Movie Description
             if (!string.IsNullOrEmpty(detailsConfig.DescriptionDelimiter)) 
             {
@@ -738,8 +992,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   string tmdbURL  = string.Format("http://api.themoviedb.org/3/movie/{1}/images?api_key={0}&language=ru", detailsConfig.TMDbApiKey, movieDetails.IMDBNumber);
                   string tmdbPage = string.Empty;
                 
-                  WebSession tmdbSession = new WebSession();
-                  if (tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
+                  // WebSession tmdbSession = new WebSession();
+                  if (/*tmdbSession*/tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
                   {
                     /*
                         XmlDocument xmlDoc = new XmlDocument();
@@ -767,7 +1021,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
 
                         if (!string.IsNullOrEmpty(strP))
                         {
-                          strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
+                          strP = string.Format("http://image.tmdb.org/t/p/w780/{0}", strP);
                           movieDetails.ThumbURL = strP;
                           break;
                     }
@@ -777,6 +1031,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
 
                   // TMDB ID
                   movieDetails.TMDBNumber = ParseSingleIntValue(tmdbPage, @"id.:(?<code>\d{1,}),", "code").ToString(); // MP1-4761
+                  movieDetails.UserReview += "\nTMDB: "+movieDetails.TMDBNumber; 
                 } 
                 else 
                 {
@@ -824,17 +1079,17 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     if (l_bigPicture != true) 
                     {
                         // Try to get picture from covers page
-                        string coverPageUrl = string.Format("http://www.kinopoisk.ru/level/17/film/{0}/adv_type/cover", movieID);
+                        string coverPageUrl = string.Format("https://www.kinopoisk.ru/level/17/film/{0}/adv_type/cover", movieID);
                         // string coverPageUrl = string.Format("https://www.kinopoisk.ru/level/17/film/{0}/adv_type/cover", movieID);
                         string coverPage = string.Empty;
                         
-                        if (webSession.Retrieve(coverPageUrl, null, out coverPage)) 
+                        if (kinopoiskSession.Retrieve(coverPageUrl, url.URL, Encoding.GetEncoding("windows-1251"), out coverPage)) 
                         {                     
                             string rx_poster_id = @"/images/poster/sm_(?<posterID>[0-9]+)";
                             string posterID = ParseSingleValue(coverPage, rx_poster_id, "posterID", true);
                             if (!string.IsNullOrEmpty(posterID) && posterID.IndexOf("<title>Обложки") > 0) 
                             {
-                                movieDetails.ThumbURL = string.Format("http://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
+                                movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
                                 // movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
                                 Log.Info("2. Cover Picture URL: {0}", movieDetails.ThumbURL);
                             }
@@ -843,17 +1098,17 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                         if (string.IsNullOrEmpty(movieDetails.ThumbURL)) 
                         {
                             // Try to get picture from posters page
-                            string posterPageUrl = string.Format("http://www.kinopoisk.ru/level/17/film/{0}", movieID);
+                            string posterPageUrl = string.Format("https://www.kinopoisk.ru/level/17/film/{0}", movieID);
                             // string posterPageUrl = string.Format("https://www.kinopoisk.ru/level/17/film/{0}", movieID);
                             string posterPage = string.Empty;
                             
-                            if (webSession.Retrieve(posterPageUrl, null, out posterPage)) 
+                            if (kinopoiskSession.Retrieve(posterPageUrl, url.URL, Encoding.GetEncoding("windows-1251"), out posterPage)) 
                             {                     
                                 string rx_poster_id = @"/images/poster/sm_(?<posterID>[0-9]+)";
                                 string posterID = ParseSingleValue(posterPage, rx_poster_id, "posterID", true);
                                 if (!string.IsNullOrEmpty(posterID) && posterID.IndexOf("<title>Постеры") > 0) 
                                 {
-                                  movieDetails.ThumbURL = string.Format("http://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
+                                  movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
                                   // movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru/images/poster/{0}.jpg", posterID);
                                   Log.Info("3. Poster Picture URL: {0}", movieDetails.ThumbURL);
                                 }
@@ -866,7 +1121,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                             string pictureUrl = ParseSingleValue(detailsPage, rx_picture, "moviePicture", true);
                             if (!string.IsNullOrEmpty(pictureUrl)) 
                             {
-                                movieDetails.ThumbURL = string.Format("http://www.kinopoisk.ru{0}", pictureUrl);
+                                movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru{0}", pictureUrl);
                                 // movieDetails.ThumbURL = string.Format("https://www.kinopoisk.ru{0}", pictureUrl);
                                 Log.Info("4. Small Picture URL: {0}", movieDetails.ThumbURL);
                             }
@@ -883,14 +1138,15 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
               string tmdbPage = string.Empty;
               int iMovieColID = -1;
 
-              WebSession tmdbSession = new WebSession();
-              if (tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
+              // WebSession tmdbSession = new WebSession();
+              if (/*tmdbSession*/tmdbSession.Retrieve(tmdbURL, Encoding.GetEncoding("UTF-8"), out tmdbPage)) 
               {
                 string tmdbJSON      = Regex.Match(tmdbPage, @"belongs_to_collection.+?{[^}]+?}", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
                 // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\"";
                 // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\"";
                 // string matchLists    = @"name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\""+@".+?backdrop_path.:"+"\""+@"(?<Backdrop>.+?)"+"\"";
-                string matchLists    = @"id.:(?<colID>\d{1,}).*?name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\""+@".+?backdrop_path.:"+"\""+@"(?<Backdrop>.+?)"+"\"";
+                // string matchLists    = @"id.:(?<colID>\d{1,}).*?name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?poster_path.:"+"\""+@"(?<Poster>.+?)"+"\""+@".+?backdrop_path.:"+"\""+@"(?<Backdrop>.+?)"+"\"";
+                string matchLists    = @"id.:\s?(?<colID>\d{1,}),[^"+"\""+@"]*?.name.:\s?"+"\""+@"(?<Collection>.+?)"+"\""+@",[^"+"\""+@"]*?.poster_path.:\s?"+"\""+@"(?<Poster>.+?)"+"\""+@",[^"+"\""+@"]*?.backdrop_path.:\s?"+"\""+@"(?<Backdrop>.+?)"+"\"";
                 MatchCollection mcLs = Regex.Matches(tmdbJSON, matchLists);
                
                 if (mcLs.Count != 0)
@@ -916,10 +1172,11 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                         string tmdbColURL  = string.Format("http://api.themoviedb.org/3/collection/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, iMovieColID);
                         string tmdbColPage = string.Empty;
 
-                        WebSession tmdbColSession = new WebSession();
-                        if (tmdbColSession.Retrieve(tmdbColURL, Encoding.GetEncoding("UTF-8"), out tmdbColPage)) 
+                        // WebSession tmdbColSession = new WebSession();
+                        if (/*tmdbColSession*/tmdbSession.Retrieve(tmdbColURL, Encoding.GetEncoding("UTF-8"), out tmdbColPage)) 
                         {
-                          string matchCollection = @"id.:(?<colID>\d{1,}).*?name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?overview.:"+"\""+@"(?<Overview>.*?)"+"\"";
+                          // string matchCollection = @"id.:(?<colID>\d{1,}).*?name.:"+"\""+@"(?<Collection>.+?)"+"\""+@".+?overview.:"+"\""+@"(?<Overview>.*?)"+"\"";
+                          string matchCollection = @"id.:\s?(?<colID>\d{1,})[^"+"\""+@"]*?.name.:\s?"+"\""+@"(?<Collection>.+?)"+"\""+@",[^"+"\""+@"]*?.overview.:\s?"+"\""+@"(?<Overview>.*?)"+"\""+@",";
                           string CollDesc = ParseSingleValue(tmdbColPage, matchCollection, "Overview", true);
                           if (!string.IsNullOrEmpty(CollDesc))
                           {
@@ -934,13 +1191,13 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                       {
                         if (!string.IsNullOrEmpty(strP))
                         {
-                          strP = string.Format("http://image.tmdb.org/t/p/w1000/{0}", strP); // w500 or w1000 or w1280 or w1920 (image width)
+                          strP = string.Format("http://image.tmdb.org/t/p/w780/{0}", strP);
                           // IMDBFetcher.DownloadCoverArt(Thumbs.MovieUserGroups, strP, strL); // Pre MP1-4761
                           IMDBFetcher.DownloadCoverArt(Thumbs.MovieCollection, strP, strL); // MP1-4761
                         }
                         if (!string.IsNullOrEmpty(strB))
                         {
-                          strB = string.Format("http://image.tmdb.org/t/p/w1920/{0}", strB); // w500 or w1000 or w1280 or w1920 (image width)
+                          strB = string.Format("http://image.tmdb.org/t/p/original/{0}", strB);
                           string fanartFilename = FanArt.SetFanArtFileName(strL, 0);
                           if (!string.IsNullOrEmpty(fanartFilename) && !File.Exists(fanartFilename))
                           {
@@ -957,6 +1214,9 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             }
             DebugLog(detailsConfig.Debug, "Movie groups: {0}", movieDetails.SingleUserGroup);
             DebugLog(detailsConfig.Debug, "Movie collection: {0}", movieDetails.MovieCollection); // MP1-4761
+
+            // Review Delimeter
+            movieDetails.UserReview += "\n\n";
             return true;
         }
         return false;
@@ -984,10 +1244,9 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
             Log.Debug("Kinopoisk.ru search start {0} ({1})", strSearch, iLimit);
 
             WebSession webSession = new WebSession();
-            // if (webSession.Retrieve("http://www.kinopoisk.ru", Encoding.GetEncoding("windows-1251"), out responseUrl, out searchResult)) 
-            // {
-                // string searchUrl = string.Format("http://www.kinopoisk.ru/index.php?kp_query={0}", GetsearchString(strSearch));
-                string searchStr = GetsearchString(strSearch.Replace("Ё", "Е").Replace("ё", "е"));
+            if (webSession.Retrieve("https://www.kinopoisk.ru", Encoding.GetEncoding("windows-1251"), out responseUrl, out searchResult)) 
+            {
+                string searchStr = GetSearchString(strSearch.Replace("Ё", "Е").Replace("ё", "е"));
                 // string rx_year = Regex('([1-2][0-9]{3})');
                 responseUrl      = string.Empty;
                 searchResult     = string.Empty;
@@ -996,67 +1255,110 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 string imdbMovieYear = string.Empty;
                 string imdbMovieID = string.Empty;
 
-                if (searchConfig.IMDBIDForce || searchStr.IndexOf("tt") == 0)
+                if (searchConfig.IMDBIDForce)
                 {
-                  // Get IMDBID
-                  Match ttcheck = Regex.Match(searchStr, @"tt\d{7}");
-                  if (!string.IsNullOrEmpty(ttcheck.Value))
-                  {   
-                    imdbMovieID = ttcheck.Value;
+                  Regex rximdbid = new Regex(@"(?:\s|\+|^)(?<imdbid>tt\d{7})");
+                  Match matchimdbid = rximdbid.Match(searchStr);
+                  if (matchimdbid.Success)
+                  {
+                    // Get IMDBID
+                    imdbMovieID = matchimdbid.Groups["imdbid"].Value;
+                    if (!string.IsNullOrEmpty(imdbMovieID))
+                    {   
+                      DebugLog(searchConfig.Debug, "IMDBID: Found {0}", imdbMovieID);
 
-                    if (!string.IsNullOrEmpty(detailsConfig.TMDbApiKey))
-                    {
-                      // Search TMDB by IMDBID    
-                      string tmdbUrl    = string.Format("http://api.themoviedb.org/3/movie/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, imdbMovieID);
-                      string tmdbSearch = @"original_title.:.(?<OTitle>[^"+"\""+@"]+?)"+"\""+@".*?release_date.:.(?<Year>\d{4}).*?title.:.(?<Title>[^"+"\""+@"]+?)"+"\"";
-                      string tmdbPage   = string.Empty;
-                      DebugLog(searchConfig.Debug, "TMDB: URL {0}", tmdbUrl);
-                      WebSession tmdbWebSession = new WebSession();
-                      if (tmdbWebSession.Retrieve(tmdbUrl, null, out tmdbPage)) 
+                      if (!string.IsNullOrEmpty(detailsConfig.TMDbApiKey))
                       {
-                        imdbMovieTitle = ParseSingleValue(tmdbPage, tmdbSearch, "Title", true);
-                        imdbMovieYear = ParseSingleValue(tmdbPage, tmdbSearch, "Year", true);
-                        string imdbMovieOTitle = ParseSingleValue(tmdbPage, tmdbSearch, "OTitle", true);
-                        if (string.IsNullOrEmpty(imdbMovieTitle))
+                        // Search TMDB by IMDBID    
+                        string tmdbUrl    = string.Format("http://api.themoviedb.org/3/movie/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, imdbMovieID);
+                        string tmdbSearch = @"original_title.:.(?<OTitle>[^"+"\""+@"]+?)"+"\""+@".*?release_date.:.(?<Year>\d{4}).*?title.:.(?<Title>[^"+"\""+@"]+?)"+"\"";
+                        string tmdbPage   = string.Empty;
+                        DebugLog(searchConfig.Debug, "TMDB: URL {0}", tmdbUrl);
+                        WebSession tmdbWebSession = new WebSession();
+                        if (tmdbWebSession.Retrieve(tmdbUrl, null, out tmdbPage)) 
                         {
-                          imdbMovieTitle = imdbMovieOTitle;
-                        }
-                        DebugLog(searchConfig.Debug, "TMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
-                        if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
-                        {
-                          searchStr = imdbMovieTitle;
-                          imdbIDFound = true;
+                          imdbMovieTitle = ParseSingleValue(tmdbPage, tmdbSearch, "Title", true);
+                          imdbMovieYear = ParseSingleValue(tmdbPage, tmdbSearch, "Year", true);
+                          string imdbMovieOTitle = ParseSingleValue(tmdbPage, tmdbSearch, "OTitle", true);
+                          if (string.IsNullOrEmpty(imdbMovieTitle))
+                          {
+                            imdbMovieTitle = imdbMovieOTitle;
+                          }
+                          DebugLog(searchConfig.Debug, "TMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
+                          if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
+                          {
+                            searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
+                            imdbIDFound = true;
+                          }
                         }
                       }
-                    }
-                    if (!imdbIDFound)
-                    {
-                      // Search IMDB by IMDBID
-                      string omdbUrl    = string.Format("http://m.imdb.com/title/{0}/", imdbMovieID);
-                      // string omdbSearch = @"[Tt]itle.:.(?<Title>[^"+"\""+@"]+?)"+"\""+@".+[Yy]ear.:.(?<Year>\d+?)"+"\"";
-                      string omdbSearch = @"media-body[^<]+?<h1>(?<Title>[^<]+?)<(?:[^\(]+?\((?<Year>\d{4})\)?[^<]+?<[^<]+?<)?\/h1>";
-                      string omdbPage   = string.Empty;
-                      DebugLog(searchConfig.Debug, "IMDB: URL {0}", omdbUrl);
-                      WebSession omdbWebSession = new WebSession();
-                      if (omdbWebSession.Retrieve(omdbUrl, null, out omdbPage)) 
+
+                      if (!imdbIDFound)
                       {
-                        imdbMovieTitle = ParseSingleValue(omdbPage, omdbSearch, "Title", true);
-                        imdbMovieYear = ParseSingleValue(omdbPage, omdbSearch, "Year", true);
-                        DebugLog(searchConfig.Debug, "IMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
-                        if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
+                        // Search IMDB by IMDBID
+                        string omdbUrl    = string.Format("http://m.imdb.com/title/{0}/", imdbMovieID);
+                        // string omdbSearch = @"[Tt]itle.:.(?<Title>[^"+"\""+@"]+?)"+"\""+@".+[Yy]ear.:.(?<Year>\d+?)"+"\"";
+                        string omdbSearch = @"media-body[^<]+?<h1>(?<Title>[^<]+?)<(?:[^\(]+?\((?<Year>\d{4})\)?[^<]+?<[^<]+?<)?\/h1>";
+                        string omdbPage   = string.Empty;
+                        DebugLog(searchConfig.Debug, "IMDB: URL {0}", omdbUrl);
+                        WebSession omdbWebSession = new WebSession();
+                        if (omdbWebSession.Retrieve(omdbUrl, null, out omdbPage)) 
                         {
-                          searchStr = imdbMovieTitle;
-                          imdbIDFound = true;
+                          imdbMovieTitle = ParseSingleValue(omdbPage, omdbSearch, "Title", true);
+                          imdbMovieYear = ParseSingleValue(omdbPage, omdbSearch, "Year", true);
+                          DebugLog(searchConfig.Debug, "IMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
+                          if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
+                          {
+                            searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
+                            imdbIDFound = true;
+                          }
                         }
                       }
                     }
                   }
                 }
 
-                string searchUrl = string.Format("http://www.kinopoisk.ru/index.php?set_result_type=simple&kp_query={0}", searchStr);
-                // string searchUrl = string.Format("https://www.kinopoisk.ru/index.php?set_result_type=simple&kp_query={0}", searchStr);
-                // string searchUrl = string.Format("https://www.kinopoisk.ru/s/type/all/find/{0}/", searchStr);
-                if (webSession.Retrieve(searchUrl, Encoding.GetEncoding("windows-1251"), out responseUrl, out searchResult)) 
+                int year = 0; // Year from search string
+
+                // Get year from search string
+                Regex rx = new Regex(@"^(.*)?[\[\(](19\d{2}|20\d{2})[\]\)]");
+                Match match = rx.Match(searchStr);
+                if (match.Success)
+                {
+                  if (Int32.TryParse(match.Groups[2].Value, out year))
+                  {
+                    searchStr = Regex.Replace(searchStr, @"\+?[\[\(](19\d{2}|20\d{2})[\]\)]", string.Empty).Trim();
+                    DebugLog(searchConfig.Debug, "YEAR: Found {0}, new Search string: {1}", year, searchStr);
+                  }
+                  else
+                  {
+                    year = 0;
+                  }
+                }
+                // Get Kinopoisk ID from search string
+                string kinopoiskID = string.Empty;
+                rx = new Regex(@"-[\s\+]KP(\d{3,})\b");
+                match = rx.Match(searchStr);
+                if (match.Success)
+                {
+                  kinopoiskID = match.Groups[1].Value;
+                  DebugLog(searchConfig.Debug, "Kinopoisk: ID Found {0}", kinopoiskID);
+                }
+
+                string searchUrl = string.Empty;
+                if (!string.IsNullOrEmpty(kinopoiskID))
+                {
+                  searchUrl = string.Format("https://www.kinopoisk.ru/film/{0}/", kinopoiskID);
+                }
+                else
+                {
+                  searchUrl = string.Format("https://www.kinopoisk.ru/index.php?set_result_type=simple&kp_query={0}", searchStr);
+                  // searchUrl = string.Format("https://www.kinopoisk.ru/index.php?kp_query={0}", searchStr);
+                  // searchUrl = string.Format("https://www.kinopoisk.ru/index.php?set_result_type=simple&kp_query={0}", searchStr);
+                  // searchUrl = string.Format("https://www.kinopoisk.ru/s/type/all/find/{0}/", searchStr);
+                }
+
+                if (webSession.Retrieve(searchUrl, "https://www.kinopoisk.ru/", Encoding.GetEncoding("windows-1251"), out responseUrl, out searchResult)) 
                 {
                     // Check if it's Details Page
                     string rx_title = @"moviename[^>]+>(?<movieTitle>[^<]+)";
@@ -1076,8 +1378,8 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                         movieAlternate = Normalize(Regex.Replace(movieAlternate, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
 
                         // Title
-                        movieTitle = ParseSingleValue(searchResult, rx_title, "movieTitle", false);
-                        movieTitle = Normalize(Regex.Replace(movieTitle, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
+                        // movieTitle = ParseSingleValue(searchResult, rx_title, "movieTitle", false);
+                        // movieTitle = Normalize(Regex.Replace(movieTitle, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
                         // Log.Error("Debug - MTD: {0} ({1})", movieAlternate, movieTitle);
 
                         // Year
@@ -1085,8 +1387,9 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                         string movieYear = ParseSingleValue(searchResult, rx_year, "movieYear", true);
                         
                         // Movie ID
-                        string rx_movie_id = @"http://www.kinopoisk.ru/level/1/film/(?<movieID>[0-9]+)";
                         // string rx_movie_id = @"https://www.kinopoisk.ru/level/1/film/(?<movieID>[0-9]+)";
+                        // string rx_movie_id = @"https://www.kinopoisk.ru/level/1/film/(?<movieID>[0-9]+)";
+                        string rx_movie_id = @"www.kinopoisk.ru\/(?:level\/1\/)?film\/[^\/]*?\-?(?<movieID>[0-9]+)(?:\/|$)";
                         string movieID = ParseSingleValue(responseUrl, rx_movie_id, "movieID", true);
                         
                         AddSearchResult(movieTitle, movieAlternate, Normalize(movieYear), movieID, elements, imdbIDFound, imdbMovieID, imdbMovieTitle, imdbMovieYear);
@@ -1095,22 +1398,57 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     {
                         // If we got a Search page, this is used
                         ArrayList movies = Parse(searchResult, rx_search_results);
-                        for(int i = 0; i < Math.Min(movies.Count, iLimit); i++) 
+                        // for(int i = 0; i < Math.Min(movies.Count, iLimit); i++) 
+                        int idx = 0;
+                        bool skip = false;
+                        for(int i = 0; i < movies.Count; i++) 
                         {
                             Hashtable movie = (Hashtable)movies[i];
                             string movieAlternate = (string)movie["movieAlternate"];
                             movieTitle = (string)movie["movieTitle"];
+                            string movieYear = (string)movie["movieYear"];
                             // Log.Error("Debug - MTL: {0} ({1})", movieAlternate, movieTitle);
                             // movieAlternate = Normalize(Regex.Replace(movieAlternate, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
                             movieAlternate = HttpUtility.HtmlDecode(movieAlternate);
                             // movieTitle = Normalize(Regex.Replace(movieTitle, @"&#(?((0?x){1})[\da-hA-H]+|[\d]+);", new MatchEvaluator(ReplaceCharUTF8)));
                             movieTitle = HttpUtility.HtmlDecode(movieTitle);
                             // Log.Error("Debug - MTL: {0} ({1})", movieAlternate, movieTitle);
-                            AddSearchResult(movieTitle, movieAlternate, Normalize((string)movie["movieYear"]), (string)movie["movieID"], elements, imdbIDFound, imdbMovieID, imdbMovieTitle, imdbMovieYear);
+                            movieYear = HttpUtility.HtmlDecode(movieYear);
+
+                            skip = false;
+                            if (!string.IsNullOrEmpty(movieYear) && year != 0)
+                            {
+                              int iYear = 0;
+                              if (!Int32.TryParse(movieYear, out iYear))
+                              {
+                                skip = true;
+                              }
+
+                              if (!skip)
+                              {
+                                if (year != iYear && (year - 1) != iYear && (year + 1) != iYear)
+                                {
+                                  skip = true;
+                                }
+                              }
+                            }
+                            if (skip)
+                            {
+                              DebugLog(searchConfig.Debug, "Kinopoisk: Skip due Year {0}: {1} - {2} ({3})", year, movieTitle, movieAlternate, movieYear);
+                              continue;
+                            }
+
+                            AddSearchResult(movieTitle, movieAlternate, movieYear, (string)movie["movieID"], elements, imdbIDFound, imdbMovieID, imdbMovieTitle, imdbMovieYear, year);
+                            idx++;
+
+                            if (idx == iLimit)
+                            {
+                              break;
+                            }
                         }
                     }
                 }
-            //}
+            }
         }
         catch (Exception ex) {
             Log.Error("Exception for Kinopoisk.ru lookup of {0} err:{1} stack:{2}", strSearch, ex.Message, ex.StackTrace);
@@ -1257,7 +1595,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
         return ch > 0 ? (Convert.ToString(Convert.ToChar(ch))) : match.Value;
     }
 
-    private string GetsearchString(string str) {
+    private string GetSearchString(string str) {
         string searchString = HttpUtility.UrlDecode(str);
         string rx_strip = string.Empty;
         foreach (string strip in SearchConfig.GetInstance().Strips) {
@@ -1281,7 +1619,7 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
         return HttpUtility.UrlEncode(searchString, Encoding.GetEncoding("windows-1251"));
     }
     
-    private void AddSearchResult(string movieTitle, string movieAlternate, string year, string movieID, ArrayList results, bool imdbIDFound, string imdbMovieID, string imdbMovieTitle, string imdbMovieYear) 
+    private void AddSearchResult(string movieTitle, string movieAlternate, string year, string movieID, ArrayList results, bool imdbIDFound, string imdbMovieID, string imdbMovieTitle, string imdbMovieYear, int iYear = 0) 
     {
         if (results != null) 
         {
@@ -1373,7 +1711,10 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   omdbSearch = @"/title/(?<imdbID>tt\d{7})[^>]+>(?<imdbTitle>[^<]+)<[^>]+>[^>]+\((?<imdbYear>\d{4})\)(.+?aka[^>]+>" + "\"?(?<imdbAKA>.+?)" + "\"?<)?";
                   ArrayList omdbMovies = Parse(omdbPage, omdbSearch);
                   DebugLog(searchConfig.Debug, "IMDB: Count {0} for URL {1}", omdbMovies.Count, omdbUrl);
-                  for(int i = 0; i < Math.Min(omdbMovies.Count, searchConfig.imdbNum); i++) 
+
+                  int idx = 0;
+                  bool skip = false;
+                  for(int i = 0; i < omdbMovies.Count; i++) 
                   {
                     Hashtable omdbMovie = (Hashtable)omdbMovies[i];
                     omdbTitle = Normalize((string)omdbMovie["imdbTitle"]);
@@ -1383,22 +1724,54 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                     imdbAKA   = imdbAKA.Trim() ;
                     omdbTitle = string.IsNullOrEmpty(imdbAKA) ? omdbTitle : omdbTitle + " aka " + imdbAKA;
                     DebugLog(searchConfig.Debug, "IMDB: Search {4}: {0} - {3} {1} ({2})", formattedTitle, omdbTitle, omdbYear, omdbID, omdbResult);
+
                     if (!string.IsNullOrEmpty(omdbTitle) && !string.IsNullOrEmpty(omdbYear) && !string.IsNullOrEmpty(omdbID)) 
                     {
+                      skip = false;
+                      if (iYear != 0)
+                      {
+                        int ifYear = 0;
+                        if (!Int32.TryParse(omdbYear, out ifYear))
+                        {
+                          skip = true;
+                        }
+
+                        if (!skip)
+                        {
+                          if (iYear != ifYear && (iYear - 1) != ifYear && (iYear + 1) != ifYear)
+                          {
+                            skip = true;
+                          }
+                        }
+                      }
+                      if (skip)
+                      {
+                        DebugLog(searchConfig.Debug, "IMDB: Skip due Year {0}: {3} - {1} ({2})", year, omdbTitle, omdbYear, omdbID);
+                        continue;
+                      }
+
                       omdbResult++ ;
                       MediaPortal.Video.Database.IMDB.IMDBUrl url =
                           new MediaPortal.Video.Database.IMDB.IMDBUrl(movieUrl+omdbID, string.Format(searchConfig.IMDBPattern, formattedTitle, omdbTitle, omdbYear, omdbID), "kinopoisk_ru");
                       results.Add(url);
+
+                      idx++;
+                      if (idx == searchConfig.imdbNum)
+                      {
+                        break;
+                      }
                     }
                   }
                 }
               }
             }
           }
+
           if (omdbResult == 0) 
           {
+            DebugLog(searchConfig.Debug, "IMDB: Result = {0} - Add: {1}", omdbResult, formattedTitle);
             MediaPortal.Video.Database.IMDB.IMDBUrl url =
-              new MediaPortal.Video.Database.IMDB.IMDBUrl(movieUrl, formattedTitle, "kinopoisk_ru");
+              new MediaPortal.Video.Database.IMDB.IMDBUrl(movieUrl, formattedTitle + " IMDB: Not found.", "kinopoisk_ru");
             results.Add(url);
           }
         }
@@ -1406,18 +1779,62 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
 }
 
 class WebSession {
-    private string m_cookieHeader = string.Empty;
+    // private string m_cookieHeader = string.Empty;
+    private string m_useragent = string.Empty;
+    private CookieContainer m_cookieContainer;
     
-    public WebSession() {
+    public WebSession()
+    {
+      /*
+      Random RandomNumber = new Random((int) DateTime.Now.Ticks & 0x0000FFFF);
+      int value = RandomNumber.Next(6);
+      switch (value)
+      {
+        case 0:
+          m_useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36"; // Chrome
+          break;
+        case 1:
+          m_useragent = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.90 Safari/537.36"; // Chrome
+          break;
+        case 2:
+          m_useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.79 Safari/537.36 Edge/14.14393"; // Edge
+          break;
+        case 3:
+          m_useragent = "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/51.0.2704.79 Safari/537.36 Edge/14.14393"; // Edge
+          break;
+        case 4:
+          m_useragent = "Mozilla/5.0 (Windows NT 10.0; WOW64; Trident/7.0; rv:11.0) like Gecko"; // IE
+          break;
+        case 5:
+          m_useragent = "Mozilla/5.0 (Windows NT 6.1; WOW64; Trident/7.0; rv:11.0) like Gecko"; // IE
+          break;
+        default:
+          m_useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36"; // Chrome
+          break;
+      }
+      */
+      m_useragent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/60.0.3112.113 Safari/537.36";
+      m_cookieContainer = new CookieContainer();
     }
-    
+
     public bool Retrieve(string requestUrl, Encoding encoding, out string data)
     {
         string responseUrl = string.Empty;
         return Retrieve(requestUrl, encoding, out responseUrl, out data);
     }
   
+    public bool Retrieve(string requestUrl, string referer, Encoding encoding, out string data)
+    {
+        string responseUrl = string.Empty;
+        return Retrieve(requestUrl, referer, encoding, out responseUrl, out data);
+    }
+  
     public bool Retrieve(string requestUrl, Encoding encoding, out string responseUrl, out string data)
+    {
+        return Retrieve(requestUrl, null, encoding, out responseUrl, out data);
+    }
+
+    public bool Retrieve(string requestUrl, string referer, Encoding encoding, out string responseUrl, out string data)
     {
       responseUrl = string.Empty;
       data        = string.Empty;
@@ -1429,40 +1846,58 @@ class WebSession {
       int maxRetries       = networkConfig.Retries;
       int tryCount         = 0;
 
+      HttpWebRequest request = (HttpWebRequest)WebRequest.Create(requestUrl);
+      request.UserAgent = m_useragent;
+      request.ProtocolVersion = HttpVersion.Version11;
+      if (!string.IsNullOrEmpty(referer))
+      {
+        request.Referer = referer;
+      }
+      if (requestUrl.IndexOf(".kinopoisk.") > 0)
+      {
+        request.Accept = "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8";
+        request.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.4");
+        request.Headers.Add("Accept-Charset", "windows-1251,utf-8;q=0.7,*;q=0.7");
+        request.Headers.Add("Keep-Alive", "300");
+        /*
+        m_cookieContainer.Add(new Cookie("users_info[check_sh_bool]","none"));
+        m_cookieContainer.Add(new Cookie("search_last_date","2010-02-19"));
+        m_cookieContainer.Add(new Cookie("search_last_month","2010-02"));
+        m_cookieContainer.Add(new Cookie("PHPSESSID","b6df76a958983da150476d9cfa0aab18"));
+        */
+
+        m_cookieContainer.Add(new Cookie("users_info[check_sh_bool]","none","/","kinopoisk.ru"));
+        m_cookieContainer.Add(new Cookie("search_last_date","2010-02-19","/","kinopoisk.ru"));
+        m_cookieContainer.Add(new Cookie("search_last_month","2010-02","/","kinopoisk.ru"));
+        m_cookieContainer.Add(new Cookie("PHPSESSID","b6df76a958983da150476d9cfa0aab18","/","kinopoisk.ru"));
+      }
+      else
+      {
+        request.Accept = "text/xml,application/xml,application/xhtml+xml,application/json,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
+        request.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
+      }
+      if (networkConfig.noCache) 
+      { 
+        request.Headers.Add("Pragma: no-cache");
+      }
+      request.CookieContainer = m_cookieContainer;
+      request.Proxy.Credentials = System.Net.CredentialCache.DefaultNetworkCredentials;
+
       while (data == string.Empty) 
       {
-        HttpWebRequest request = (HttpWebRequest)WebRequest.Create(requestUrl);
-
         tryCount++;
-        Log.Debug("Connection start: {0}/{1}:{2} - {3}", tryCount, maxRetries,timeout + (timeoutIncrement * tryCount),requestUrl);
+        Log.Debug("Connection start: {0}/{1}:{2} - {3} : {4} - {5}", tryCount, maxRetries,timeout + (timeoutIncrement * tryCount),requestUrl, m_useragent, referer);
         try 
         {
-          request.UserAgent        = "Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)";
-          // request.UserAgent       = "Mozilla/5.0 (Windows NT 5.1) AppleWebKit/535.1 (KHTML, like Gecko) Chrome/14.0.835.186 Safari/535.1";    
-          // request.UserAgent       = "Mozilla/8.0 (compatible; MSIE 9.0; Windows NT 6.1; .NET CLR 1.0.3705;)";
-          request.Accept           = "text/xml,application/xml,application/xhtml+xml,application/json,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
-          request.Referer          = "http://www.kinopoisk.ru";
-          // request.Referer          = "https://www.kinopoisk.ru";
-          request.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
-          if (networkConfig.noCache) 
-          { 
-            request.Headers.Add("Pragma: no-cache");
-          }
           request.Timeout          = timeout + (timeoutIncrement * tryCount);
           request.ReadWriteTimeout = request.Timeout;
-          request.CookieContainer  = new CookieContainer();
-          if (m_cookieHeader != null)
-          {
-            request.CookieContainer.SetCookies(request.RequestUri, m_cookieHeader);
-          }
-          request.Proxy.Credentials = System.Net.CredentialCache.DefaultNetworkCredentials;
 
           // Get response from site
           using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
           {
-            m_cookieHeader = request.CookieContainer.GetCookieHeader(request.RequestUri);
+            // m_cookieHeader = request.CookieContainer.GetCookieHeader(request.RequestUri);
             responseUrl    = response.ResponseUri.AbsoluteUri;
-
+	
             // Get result as stream
             using(Stream resultData = response.GetResponseStream())
             {
@@ -1538,6 +1973,18 @@ class WebSession {
           Log.Error("Connection failed: {0}:{1} URL={2} - {3}", tryCount, maxRetries, requestUrl, ex.Message);
           Log.Debug(ex.StackTrace);
           return false;
+        }
+      }
+      if (requestUrl.IndexOf(".kinopoisk.") > 0)
+      {
+        if (!string.IsNullOrEmpty(data) && data.IndexOf("kinopoisk.ru/captcha") > 1)
+        {
+          Log.Debug("Kinopoisk: Captcha found ...");
+        }
+        else
+        {
+          Log.Debug("Kinopoisk: Retrieve! Connection sleep ...");
+          Thread.Sleep(10000);
         }
       }
       return true;
@@ -1684,6 +2131,7 @@ class DetailsConfig {
     private bool   m_tmdbGroups            = false;
     private bool   m_tmdbGroupsPoster      = false;
     private bool   m_movieAwards           = true;
+    private bool   m_fullMPAAIMDBText      = false;
     private bool   m_addTextRatingToPlot   = false;
     
     private static DetailsConfig m_detailsConfig = null;
@@ -1771,6 +2219,11 @@ class DetailsConfig {
             return m_addTextRatingToPlot;
         }
     }
+    public bool FullMPAAIMDBText {
+        get {
+            return m_fullMPAAIMDBText;
+        }
+    }
     public static DetailsConfig GetInstance() {
         if (m_detailsConfig == null) {
             m_detailsConfig = new DetailsConfig();
@@ -1851,6 +2304,10 @@ class DetailsConfig {
                 node = root.SelectSingleNode("//details/MovieAwards");
                 if (node != null && node.FirstChild != null) {
                     m_movieAwards = "true".Equals(node.FirstChild.Value.ToLower());
+                }
+                node = root.SelectSingleNode("//details/fullMPAAIMDBText");
+                if (node != null && node.FirstChild != null) {
+                    m_fullMPAAIMDBText = "true".Equals(node.FirstChild.Value.ToLower());
                 }
                 node = root.SelectSingleNode("//details/addTextRatingToPlot");
                 if (node != null && node.FirstChild != null) {
