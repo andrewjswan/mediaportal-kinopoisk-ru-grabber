@@ -8,6 +8,7 @@ using System.Collections;
 using System.Globalization;
 using System.IO;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -21,7 +22,7 @@ using MediaPortal.Video.Database;
 
 class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
-    const string strKinopoiskVersion = "20180131.01 by ajs";
+    const string strKinopoiskVersion = "20180201.01 by ajs";
 
     public Grabber()
     {
@@ -1238,6 +1239,11 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
 
             string responseUrl       = string.Empty;
             string searchResult      = string.Empty;
+            string imdbMovieTitle    = string.Empty;
+            string imdbMovieYear     = string.Empty;
+            string imdbMovieID       = string.Empty;
+            string tmdbMovieID       = string.Empty;
+            string kinopoiskID       = string.Empty;
             bool imdbIDFound         = false;
             
             Log.Info("Version: kinopoisk.ru {0}.", strKinopoiskVersion);
@@ -1251,76 +1257,90 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                 responseUrl      = string.Empty;
                 searchResult     = string.Empty;
 
-                string imdbMovieTitle = string.Empty;
-                string imdbMovieYear = string.Empty;
-                string imdbMovieID = string.Empty;
-
                 if (searchConfig.IMDBIDForce)
                 {
-                  Regex rximdbid = new Regex(@"(?:\s|\+|^)(?<imdbid>tt\d{7})");
+                  // Get IMDB ID from search string
+                  Regex rximdbid = new Regex(@"(?:\s|\+|^)(?<imdbid>tt\d{7})\b");
                   Match matchimdbid = rximdbid.Match(searchStr);
                   if (matchimdbid.Success)
                   {
                     // Get IMDBID
                     imdbMovieID = matchimdbid.Groups["imdbid"].Value;
-                    if (!string.IsNullOrEmpty(imdbMovieID))
-                    {   
-                      DebugLog(searchConfig.Debug, "IMDBID: Found {0}", imdbMovieID);
+                    DebugLog(searchConfig.Debug, "IMDBID: Found {0}", imdbMovieID);
+                  }
+                  // Get TMDB ID from search string
+                  rximdbid = new Regex(@"-[\s\+]TMDB(?<tmdbid>\d{1,})\b");
+                  matchimdbid = rximdbid.Match(searchStr);
+                  if (matchimdbid.Success)
+                  {
+                    // Get TMDB
+                    tmdbMovieID = matchimdbid.Groups["tmdbid"].Value;
+                    DebugLog(searchConfig.Debug, "TMDBID: Found {0}", tmdbMovieID);
+                  }
+                  // Get Kinopoisk ID from search string
+                  rximdbid = new Regex(@"-[\s\+]KP(?<kpid>\d{3,})\b");
+                  matchimdbid = rximdbid.Match(searchStr);
+                  if (matchimdbid.Success)
+                  {
+                    kinopoiskID = matchimdbid.Groups["kpid"].Value;
+                    DebugLog(searchConfig.Debug, "Kinopoisk: ID Found {0}", kinopoiskID);
+                  }
 
-                      if (!string.IsNullOrEmpty(detailsConfig.TMDbApiKey))
+                  if (!string.IsNullOrEmpty(imdbMovieID) || !string.IsNullOrEmpty(tmdbMovieID))
+                  {   
+                    if (!string.IsNullOrEmpty(detailsConfig.TMDbApiKey))
+                    {
+                      // Search TMDB by IMDBID    
+                      string tmdbUrlID  = string.IsNullOrEmpty(imdbMovieID) ? tmdbMovieID : imdbMovieID;
+                      string tmdbUrl    = string.Format("http://api.themoviedb.org/3/movie/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, tmdbUrlID);
+                      string tmdbSearch = @"original_title.:.(?<OTitle>[^"+"\""+@"]+?)"+"\""+@".*?release_date.:.(?<Year>\d{4}).*?title.:.(?<Title>[^"+"\""+@"]+?)"+"\"";
+                      string tmdbPage   = string.Empty;
+                      DebugLog(searchConfig.Debug, "TMDB: URL {0}", tmdbUrl);
+                      WebSession tmdbWebSession = new WebSession();
+                      if (tmdbWebSession.Retrieve(tmdbUrl, null, out tmdbPage)) 
                       {
-                        // Search TMDB by IMDBID    
-                        string tmdbUrl    = string.Format("http://api.themoviedb.org/3/movie/{1}?api_key={0}&language=ru", detailsConfig.TMDbApiKey, imdbMovieID);
-                        string tmdbSearch = @"original_title.:.(?<OTitle>[^"+"\""+@"]+?)"+"\""+@".*?release_date.:.(?<Year>\d{4}).*?title.:.(?<Title>[^"+"\""+@"]+?)"+"\"";
-                        string tmdbPage   = string.Empty;
-                        DebugLog(searchConfig.Debug, "TMDB: URL {0}", tmdbUrl);
-                        WebSession tmdbWebSession = new WebSession();
-                        if (tmdbWebSession.Retrieve(tmdbUrl, null, out tmdbPage)) 
+                        imdbMovieTitle = ParseSingleValue(tmdbPage, tmdbSearch, "Title", true);
+                        imdbMovieYear = ParseSingleValue(tmdbPage, tmdbSearch, "Year", true);
+                        string imdbMovieOTitle = ParseSingleValue(tmdbPage, tmdbSearch, "OTitle", true);
+                        if (string.IsNullOrEmpty(imdbMovieTitle))
                         {
-                          imdbMovieTitle = ParseSingleValue(tmdbPage, tmdbSearch, "Title", true);
-                          imdbMovieYear = ParseSingleValue(tmdbPage, tmdbSearch, "Year", true);
-                          string imdbMovieOTitle = ParseSingleValue(tmdbPage, tmdbSearch, "OTitle", true);
-                          if (string.IsNullOrEmpty(imdbMovieTitle))
-                          {
-                            imdbMovieTitle = imdbMovieOTitle;
-                          }
-                          DebugLog(searchConfig.Debug, "TMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
-                          if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
-                          {
-                            searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
-                            imdbIDFound = true;
-                          }
+                          imdbMovieTitle = imdbMovieOTitle;
+                        }
+                        DebugLog(searchConfig.Debug, "TMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
+                        if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
+                        {
+                          searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
+                          imdbIDFound = true;
                         }
                       }
+                    }
 
-                      if (!imdbIDFound)
+                    if (!imdbIDFound && !string.IsNullOrEmpty(imdbMovieID))
+                    {
+                      // Search IMDB by IMDBID
+                      string omdbUrl    = string.Format("http://m.imdb.com/title/{0}/", imdbMovieID);
+                      // string omdbSearch = @"[Tt]itle.:.(?<Title>[^"+"\""+@"]+?)"+"\""+@".+[Yy]ear.:.(?<Year>\d+?)"+"\"";
+                      string omdbSearch = @"media-body[^<]+?<h1>(?<Title>[^<]+?)<(?:[^\(]+?\((?<Year>\d{4})\)?[^<]+?<[^<]+?<)?\/h1>";
+                      string omdbPage   = string.Empty;
+                      DebugLog(searchConfig.Debug, "IMDB: URL {0}", omdbUrl);
+                      WebSession omdbWebSession = new WebSession();
+                      if (omdbWebSession.Retrieve(omdbUrl, null, out omdbPage)) 
                       {
-                        // Search IMDB by IMDBID
-                        string omdbUrl    = string.Format("http://m.imdb.com/title/{0}/", imdbMovieID);
-                        // string omdbSearch = @"[Tt]itle.:.(?<Title>[^"+"\""+@"]+?)"+"\""+@".+[Yy]ear.:.(?<Year>\d+?)"+"\"";
-                        string omdbSearch = @"media-body[^<]+?<h1>(?<Title>[^<]+?)<(?:[^\(]+?\((?<Year>\d{4})\)?[^<]+?<[^<]+?<)?\/h1>";
-                        string omdbPage   = string.Empty;
-                        DebugLog(searchConfig.Debug, "IMDB: URL {0}", omdbUrl);
-                        WebSession omdbWebSession = new WebSession();
-                        if (omdbWebSession.Retrieve(omdbUrl, null, out omdbPage)) 
+                        imdbMovieTitle = ParseSingleValue(omdbPage, omdbSearch, "Title", true);
+                        imdbMovieYear = ParseSingleValue(omdbPage, omdbSearch, "Year", true);
+                        DebugLog(searchConfig.Debug, "IMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
+                        if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
                         {
-                          imdbMovieTitle = ParseSingleValue(omdbPage, omdbSearch, "Title", true);
-                          imdbMovieYear = ParseSingleValue(omdbPage, omdbSearch, "Year", true);
-                          DebugLog(searchConfig.Debug, "IMDB: {0}: {1} ({2})", imdbMovieID, imdbMovieTitle, imdbMovieYear);
-                          if (!string.IsNullOrEmpty(imdbMovieTitle) && !string.IsNullOrEmpty(imdbMovieYear)) 
-                          {
-                            searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
-                            imdbIDFound = true;
-                          }
+                          searchStr = imdbMovieTitle + " " + "("+imdbMovieYear.Trim()+")";
+                          imdbIDFound = true;
                         }
                       }
                     }
                   }
                 }
 
-                int year = 0; // Year from search string
-
-                // Get year from search string
+                int year = 0;
+                // Get Year from search string
                 Regex rx = new Regex(@"^(.*)?[\[\(](19\d{2}|20\d{2})[\]\)]");
                 Match match = rx.Match(searchStr);
                 if (match.Success)
@@ -1334,15 +1354,6 @@ class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabbe
                   {
                     year = 0;
                   }
-                }
-                // Get Kinopoisk ID from search string
-                string kinopoiskID = string.Empty;
-                rx = new Regex(@"-[\s\+]KP(\d{3,})\b");
-                match = rx.Match(searchStr);
-                if (match.Success)
-                {
-                  kinopoiskID = match.Groups[1].Value;
-                  DebugLog(searchConfig.Debug, "Kinopoisk: ID Found {0}", kinopoiskID);
                 }
 
                 string searchUrl = string.Empty;
@@ -1783,6 +1794,9 @@ class WebSession {
     private string m_useragent = string.Empty;
     private CookieContainer m_cookieContainer;
     
+    [DllImport("wininet.dll", SetLastError = true)]
+    public static extern bool InternetGetCookie(string lpszUrl, string lpszCookieName, StringBuilder lpszCookieData, ref int lpdwSize);
+
     public WebSession()
     {
       /*
@@ -1860,16 +1874,25 @@ class WebSession {
         request.Headers.Add("Accept-Charset", "windows-1251,utf-8;q=0.7,*;q=0.7");
         request.Headers.Add("Keep-Alive", "300");
         /*
-        m_cookieContainer.Add(new Cookie("users_info[check_sh_bool]","none"));
-        m_cookieContainer.Add(new Cookie("search_last_date","2010-02-19"));
-        m_cookieContainer.Add(new Cookie("search_last_month","2010-02"));
-        m_cookieContainer.Add(new Cookie("PHPSESSID","b6df76a958983da150476d9cfa0aab18"));
-        */
-
         m_cookieContainer.Add(new Cookie("users_info[check_sh_bool]","none","/","kinopoisk.ru"));
         m_cookieContainer.Add(new Cookie("search_last_date","2010-02-19","/","kinopoisk.ru"));
         m_cookieContainer.Add(new Cookie("search_last_month","2010-02","/","kinopoisk.ru"));
         m_cookieContainer.Add(new Cookie("PHPSESSID","b6df76a958983da150476d9cfa0aab18","/","kinopoisk.ru"));
+        */
+        if (m_cookieContainer.Count == 0)
+        {
+          // find out how big a buffer is needed
+          int size = 0;
+          InternetGetCookie(requestUrl, null, null, ref size);
+
+          // create buffer of correct size
+          StringBuilder lpszCookieData = new StringBuilder(size);
+          InternetGetCookie(requestUrl, null, lpszCookieData, ref size);
+
+          // get cookie
+          string cookie = lpszCookieData.ToString();
+          m_cookieContainer.SetCookies(new Uri(requestUrl), cookie.ToString().Replace(';', ','));
+        }
       }
       else
       {
@@ -1887,6 +1910,7 @@ class WebSession {
       {
         tryCount++;
         Log.Debug("Connection start: {0}/{1}:{2} - {3} : {4} - {5}", tryCount, maxRetries,timeout + (timeoutIncrement * tryCount),requestUrl, m_useragent, referer);
+        Log.Debug("Cookie count: {0}", m_cookieContainer.Count);
         try 
         {
           request.Timeout          = timeout + (timeoutIncrement * tryCount);
