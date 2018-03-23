@@ -1,6 +1,13 @@
 ﻿//css_reference "core.dll";
 //css_reference "Databases.dll";
 //css_reference "utils.dll";
+//css_reference "Newtonsoft.Json.dll";
+
+using MediaPortal.GUI.Library;
+using MediaPortal.Util;
+using MediaPortal.Video.Database;
+
+using Newtonsoft.Json;
 
 using System;
 using System.Text;
@@ -8,14 +15,12 @@ using System.IO;
 using System.Net;
 using System.Web;
 using System.Text.RegularExpressions;
-using MediaPortal.GUI.Library;
-using MediaPortal.Util;
-using MediaPortal.Video.Database;
 using System.Collections;
+using System.Collections.Generic;
 
 internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 {
-  const string strKinopoiskVersion = "20180124.01 by ajs";
+  const string strKinopoiskVersion = "20180227.I by ajs";
 
   private string _strBody = string.Empty;
 
@@ -101,9 +106,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
     if (title != string.Empty)
     {
-      title = title.Replace("\n", "");
-      title = Utils.stripHTMLtags(title).Trim();
-      title = HttpUtility.HtmlDecode(title);
+      title = title.Replace("\n", string.Empty);
+      title = CleanCrlf(title);
       movie.Title = title;
     }
 
@@ -129,15 +133,18 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
     else
     {
-      movie.WritingCredits = HttpUtility.HtmlDecode(director.Replace("\n", string.Empty));
-      if (movie.WritingCredits != null) movie.WritingCredits = movie.WritingCredits.Replace(",", ", ");
+      movie.WritingCredits = CleanCrlf(director.Replace("\n", string.Empty));
+      if (movie.WritingCredits != null) 
+      {
+        movie.WritingCredits = movie.WritingCredits.Replace(",", ", ");
+      }
     }
 
     // Genre
     regex = @"<h3>Genres</h3>(?<genre>.+?)</section>";
     string genre =
       Regex.Match(_strBody, regex, RegexOptions.Singleline | RegexOptions.IgnoreCase).Groups["genre"].Value.Trim();
-    genre = HttpUtility.HtmlDecode(Utils.stripHTMLtags(genre.Replace("\n", "")));
+    genre = CleanCrlf(genre.Replace("\n", string.Empty));
     if (string.IsNullOrEmpty(genre))
     {
       genre = Strings.Unknown;
@@ -169,7 +176,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     foreach (Match actor in actors)
     {
       string tmpActor = actor.Groups["actor"].Value;
-      tmpActor = HttpUtility.HtmlDecode(tmpActor);
+      tmpActor = CleanCrlf(tmpActor);
 
       if (tmpActor != string.Empty && actorNo < 4)
       {
@@ -179,7 +186,6 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
 
     int index = strActor.LastIndexOf(" /");
-
     if (index > 0)
     {
       strActor = strActor.Remove(index);
@@ -399,71 +405,23 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         value = Utils.RemoveParenthesis(value).Trim();
         value = HttpUtility.HtmlDecode(value.Trim());
         value = Utils.stripHTMLtags(value);
-        actor.Name = value.Replace("\n", "");
+        value = CleanCrlf(value.Replace("\n", string.Empty));
+        actor.Name = Regex.Replace(value, @"\(\S+?\)", string.Empty).Trim();
       }
 
-      if (actor.Name == string.Empty)
+      if (string.IsNullOrEmpty(actor.Name))
       {
         actor.Name = url.Title;
       }
 
       #endregion
 
-      #region Kinopoisk Actor Page
+      #region Kinopoisk Actor 
+
       Log.Debug("Version: actor.kinopoisk.ru {0}.", strKinopoiskVersion);
 
-      // Kinopoisk Actor URL
-      string KPURL    = string.Format("http://www.kinopoisk.ru/index.php?kp_query={0}", actor.Name);
-      string KPhtml   = GetKPPage(KPURL, "windows-1251", out absoluteUri);
-      string KPName   = string.Empty;
-      string KPHeight = string.Empty;
-      string KPSign   = string.Empty;
-      KPURL = string.Empty;
-
-      HTMLParser KParser = new HTMLParser(KPhtml);
-      string KPvalue      = string.Empty;
-      KParser.skipToEndOf("<div class=\"info\">");
-      KParser.extractTo("<div class=\"search_results\">", ref KPvalue);
-      KParser.Content = KPvalue;
-      KPvalue = string.Empty;
-
-      if (KParser.skipToEndOf("<p class=\"name\">") &&
-          KParser.skipToEndOf("<a href=\"") &&
-          KParser.skipToEndOf("name/") &&
-          KParser.extractTo("/", ref KPvalue))
-      {
-        KPvalue = KPvalue.Trim();
-        if (KPvalue != string.Empty)
-        {
-          KPURL = string.Format("http://www.kinopoisk.ru/name/{0}/view_info/ok/",KPvalue);
-        }
-      }
-      Log.Debug(":: {1} URL: {0}", string.IsNullOrEmpty(KPURL) ? "None" : KPURL , actor.Name);
-
-      // Kinopoisk Actor name & page
-      if (KPURL != string.Empty)
-      {
-         KPhtml = GetKPPage(KPURL, "windows-1251", out absoluteUri);
-         KParser.Content = KPhtml;
-         KPvalue = string.Empty;
-
-         KParser.skipToEndOf("<div id=\"headerPeople\" class=\"country_num\">");
-         KParser.extractTo("id=\"ta_actor_notice\">", ref KPvalue);
-         KParser.Content = KPvalue;
-         KPvalue = string.Empty;
-
-         if (KParser.skipToEndOf("itemprop=\"name\">") &&
-             KParser.extractTo("</h1>", ref KPvalue))
-         {
-            KPvalue = new HTMLUtil().ConvertHTMLToAnsi(KPvalue);
-            KPvalue = Utils.RemoveParenthesis(KPvalue).Trim();
-            KPvalue = HttpUtility.HtmlDecode(KPvalue.Trim());
-            KPvalue = Utils.stripHTMLtags(KPvalue);
-            Log.Debug(":: {1} IMDB Name -> Kinopoisk Name: {0}", KPvalue, actor.Name);
-            actor.Name = KPvalue.Trim();
-            KPName = KPvalue.Trim();
-         }
-      }
+      // Kinopoisk Actor Class
+      KPPerson kpActor = GetPersonByName(actor.Name, true);
 
       #endregion
 
@@ -489,21 +447,9 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
       }
 
       // Kinopoisk
-      if (actor.ThumbnailUrl == string.Empty) {
-        if (KParser.skipToEndOf("id=\"photoBlock\"")) {
-          if (KParser.skipToEndOf("<img title=") &&
-              KParser.skipToEndOf(" src=\"") &&
-              KParser.extractTo("\"", ref value)) {
-            value = Utils.stripHTMLtags(value);
-            if (value.IndexOf("photo_none", 0) > 0) {
-              value = string.Empty;
-            } 
-            Log.Debug(":: {1} Thumbs: {0}", value, KPName);
-            if (value != string.Empty) {
-              actor.ThumbnailUrl = value.Trim();
-            }
-          }
-        }
+      if (string.IsNullOrEmpty(actor.ThumbnailUrl) && !string.IsNullOrEmpty(kpActor.Thumb))
+      {
+        actor.ThumbnailUrl = kpActor.Thumb.Trim();
       }
 
       #endregion
@@ -527,9 +473,10 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         if (parser.skipToEndOf("<h3>Born</h3>") &&
             parser.skipToEndOf("<time datetime=") &&
             parser.skipToEndOf("itemprop=\"birthDate\">") &&
-            parser.skipToEndOf("</span><br />") &&
+            parser.skipToEndOf("</span>") &&
+            parser.skipToEndOf("<br />") &&
             parser.skipToEndOf("<span>") &&
-            parser.extractTo("</span>\n        </p>", ref value))
+            parser.extractTo("</span>", ref value))
         {
           actor.PlaceOfBirth = HttpUtility.HtmlDecode(value);
         }
@@ -537,56 +484,14 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
       }
       
       // Kinopoisk
-      if (KParser.skipToEndOf("рост"))
+      if (!string.IsNullOrEmpty(kpActor.Birthday))
       {
-        if (KParser.skipToEndOf("<span>") &&
-            KParser.extractTo("</span>", ref value))
-        {
-          value = HttpUtility.HtmlDecode(value.Trim());
-          value = Utils.stripHTMLtags(value);
-          Log.Debug(":: {1} Height: {0}", value, KPName);
-          if (value != string.Empty)
-          {
-            KPHeight = value;
-          }
-        }
+        actor.DateOfBirth = kpActor.Birthday;
       }
-      if (KParser.skipToEndOf("birthDate=\""))
+      // Birth place
+      if (!string.IsNullOrEmpty(kpActor.Birthplace))
       {
-        if (KParser.skipToEndOf("\">") &&
-            KParser.extractTo("<span class=", ref value))
-        {
-          value = HttpUtility.HtmlDecode(value.Trim());
-          value = Utils.stripHTMLtags(value);
-          Log.Debug(":: {1} Birth: {0}", value, KPName);
-          if (value != string.Empty)
-          {
-            actor.DateOfBirth = value;
-          }
-        }
-        // Birth sign
-        if (KParser.skipToEndOf("<span class=\"zod\">") &&
-            KParser.skipToEndOf("\">") &&
-            KParser.extractTo("</a>", ref value))
-        {
-          value  = HttpUtility.HtmlDecode(value.Trim());
-          value  = Utils.stripHTMLtags(value);
-          KPSign = value;
-          Log.Debug(":: {1} Sign: {0}", value, KPName);
-        }
-        // Birth place
-        if (KParser.skipToEndOf("<td class=\"type\">") &&
-            KParser.skipToEndOf("<span>") &&
-            KParser.extractTo("</span>", ref value))
-        {
-          value = HttpUtility.HtmlDecode(value.Trim());
-          value = Utils.stripHTMLtags(value);
-          Log.Debug(":: {1} Birth place: {0}", value, KPName);
-          if (value != string.Empty)
-          {
-            actor.PlaceOfBirth = value;
-          }
-        }
+        actor.PlaceOfBirth = kpActor.Birthplace;
       }
 
       #endregion
@@ -612,7 +517,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         if (parser.skipToEndOf("<h3>Died</h3>") &&
             parser.skipToEndOf("<time datetime=") &&
             parser.skipToEndOf("itemprop=\"deathDate\">") &&
-            parser.skipToEndOf("</span><br />") &&
+            parser.skipToEndOf("</span>") &&
+            parser.skipToEndOf("<br />") &&
             parser.skipToEndOf("<span>") &&
             parser.extractTo("</span>", ref value))
         {
@@ -621,32 +527,14 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
       }
 
       // Kinopoisk
-      if (KParser.skipToEndOf("дата смерти"))
+      if (!string.IsNullOrEmpty(kpActor.Death))
       {
-        if (KParser.skipToEndOf("<span>") &&
-            KParser.extractTo("<span class=", ref value))
-        {
-          value = HttpUtility.HtmlDecode(value.Trim());
-          value = Utils.stripHTMLtags(value);
-          Log.Debug(":: {1} Death: {0}", value, KPName);
-          if (value != string.Empty)
-          {
-            actor.DateOfDeath = value;
-          }
-        }
-        // Birth place
-        if (KParser.skipToEndOf("<td class=\"type\">") &&
-            KParser.skipToEndOf("<span>") &&
-            KParser.extractTo("</span>", ref value))
-        {
-          value = HttpUtility.HtmlDecode(value.Trim());
-          value = Utils.stripHTMLtags(value);
-          Log.Debug(":: {1} Death place: {0}", value, KPName);
-          if (value != string.Empty)
-          {
-            actor.PlaceOfDeath = value ;
-          }
-        }
+        actor.DateOfDeath = kpActor.Death;
+      }
+      // Birth place
+      if (!string.IsNullOrEmpty(kpActor.Birthplace))
+      {
+        actor.PlaceOfDeath = kpActor.Deathplace;
       }
 
       #endregion
@@ -665,9 +553,14 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         value = Utils.stripHTMLtags(value).Trim();
         value = HttpUtility.HtmlDecode(value);
         actor.MiniBiography = value;
-        if (KPName != string.Empty)
+
+        // Kinopoisk Actor mini Bio
+        if (!string.IsNullOrEmpty(kpActor.Name))
         {
-         actor.MiniBiography = string.Format("{0}"+(KPSign != string.Empty ? " ({1})" : "")+(KPHeight != string.Empty ? " Рост: {3}" : "")+(actor.MiniBiography != string.Empty ? ":\n{2}" : ""), KPName, KPSign, actor.MiniBiography, KPHeight);
+          actor.MiniBiography = string.Format("{0}" + (!string.IsNullOrWhiteSpace(kpActor.Sign) ? " ({1})" : string.Empty) + 
+                                                      (!string.IsNullOrWhiteSpace(kpActor.Growth) ? " Рост: {3} м" : string.Empty) + 
+                                                      (!string.IsNullOrWhiteSpace(actor.MiniBiography) ? ":\n{2}" : ""), 
+                                              kpActor.Name, kpActor.Sign, actor.MiniBiography, kpActor.Growth);
         }
 
         string fullBioUrl = string.Format("http://m.imdb.com/name/{0}/bio?ref_=m_mn_ov_bio", actor.IMDBActorID);
@@ -685,27 +578,18 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         }
 
         // Kinopoisk Actor trivia
-        if (KPName != string.Empty)
+        if (!string.IsNullOrEmpty(kpActor.Trivia))
         {
-          string rx_trivia        = @"<li[^>]+?trivia.+?>(?<movieTrivia>.+?)</li>";
-          ArrayList triviaList    = Parse(KPhtml, rx_trivia);
-          value = string.Empty;
-          if (triviaList != null && triviaList.Count > 0) {
-            for(int i = 0; i < triviaList.Count; i++) {
-              Hashtable trivia = (Hashtable)triviaList[i];
-              string triviaText = (string)trivia["movieTrivia"];
-              triviaText = triviaText.Trim().Replace("\n", "");
-              triviaText = Utils.stripHTMLtags(triviaText).Trim();;
-              triviaText = HttpUtility.HtmlDecode(triviaText);
-              Log.Debug(":: {1} Trivia: {0}", triviaText, KPName);;
-              value += "- "+triviaText+"\n"; 
-            }
-            if (value != string.Empty)
-            {
-              actor.Biography = value+"\n\n"+actor.Biography+"\n\n" ;
-            }
-          }
+          actor.Biography = kpActor.Trivia + "\n\n" + actor.Biography;
         }
+
+        // IMDB Awards
+        string imdbAwards = GetAwardsIMDB(actor.IMDBActorID);
+        if (!string.IsNullOrEmpty(imdbAwards))
+        {
+          actor.Biography = actor.Biography + "\n\n" + imdbAwards;
+        }
+        actor.Biography = actor.Biography + "\n\n";
       }
 
       #endregion
@@ -975,13 +859,13 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
   {
     string cleanString = string.Empty;
     cleanString = Utils.stripHTMLtags(stringToClean).Trim();
-    cleanString = HttpUtility.HtmlDecode(cleanString.Replace("\n", " ").Replace("\r", string.Empty).Trim());
+    cleanString = HttpUtility.HtmlDecode(cleanString.Replace("\n", " ").Replace("\r", string.Empty).Replace("\t", " ").Trim());
 
-    if (cleanString != null && cleanString.EndsWith("/"))
+    if (!string.IsNullOrEmpty(cleanString) && cleanString.EndsWith("/"))
     {
       cleanString = cleanString.Remove(cleanString.LastIndexOf("/"));
     }
-
+   
     return cleanString;
   }
 
@@ -1028,14 +912,218 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
   #endregion
 
+  #region IMDBActorAwards
+
+  private string GetAwardsIMDB(string IMDBID)
+  {
+    if (string.IsNullOrEmpty(IMDBID))
+    {
+      return string.Empty;
+    }
+
+    try
+    {
+      string uri = string.Empty;
+      string _awardsURL = string.Format("http://www.imdb.com/name/{0}/awards", IMDBID);
+      string _awardsPage = GetPage(_awardsURL, "utf-8", out uri);
+      if (string.IsNullOrEmpty(_awardsPage))
+      {
+        return string.Empty;
+      }
+
+      string _awardsList = string.Empty;
+
+      string rx_awards_mainblock = @"<h3>(?<award>[^<]+?)<\/h3>[^<]*?<table[^>]+?>(?<block>[\s\S]+?)<\/table>";
+      string rx_awards_listWblock = @">(?<awardyear>[^<]+?)<\/a>[^>]+?>[^<]+?<td[^>]+?>[^<]+?<b>(?!Nomin(?:ated|ee))(W(?:on|inner))<\/b(?<block>[\s\S]+?)<\/tr";
+      string rx_awards_listNblock = @">(?<awardyear>[^<]+?)<\/a>[^>]+?>[^<]+?<td[^>]+?>[^<]+?<b>(?!W(?:on|inner))(Nomin(?:ated|ee))<\/b(?<block>[\s\S]+?)<\/tr";
+      string rx_awards_line = @"award_category.>(?<award>[^<]+?)<[\s\S]+?award_description.>(?<what>[^<]+?)(?:<br.?\/>)?(?<who><[\s\S]+?)<\/td>";
+      _awardsPage = HttpUtility.HtmlDecode(_awardsPage);
+
+      ArrayList awardsList = Parse(_awardsPage, rx_awards_mainblock);
+      if (awardsList != null && awardsList.Count > 0)
+      {
+        for (int i = 0; i < awardsList.Count; i++)
+        {
+          Hashtable awardMain = (Hashtable)awardsList[i];
+          string awardMainName = (string)awardMain["award"];
+          string awardMainBlock = (string)awardMain["block"];
+          awardMainName = awardMainName.Trim().Replace("\n", string.Empty);
+          awardMainName = Utils.stripHTMLtags(awardMainName);
+
+          if (!string.IsNullOrEmpty(awardMainBlock))
+          {
+            _awardsList = _awardsList + "* " + awardMainName + "\n";
+            // Winner
+            ArrayList awardsWList = Parse(awardMainBlock, rx_awards_listWblock);
+            if (awardsWList != null && awardsWList.Count > 0)
+            {
+              for (int k = 0; k < awardsWList.Count; k++)
+              {
+                Hashtable awardWMain = (Hashtable)awardsWList[k];
+                string awardWMainYear = (string)awardWMain["awardyear"];
+                string awardWMainBlock = (string)awardWMain["block"];
+                if (!string.IsNullOrEmpty(awardWMainBlock))
+                {
+                  _awardsList = _awardsList + "Won:\n";
+                  ArrayList awardsWListLines = Parse(awardWMainBlock, rx_awards_line);
+                  if (awardsWListLines != null && awardsWListLines.Count > 0)
+                  {
+                    if (!string.IsNullOrEmpty(awardWMainYear))
+                    {
+                      awardWMainYear = awardWMainYear.Trim().Replace("\n", string.Empty);
+                      awardWMainYear = Utils.stripHTMLtags(awardWMainYear);
+                      awardWMainYear = Regex.Replace(awardWMainYear, @"[ ]{2,}", " ").Trim();
+                      awardWMainYear = " (" + awardWMainYear + ")"; 
+                    }
+                    else
+                    {
+                      awardWMainYear = string.Empty;
+                    }
+                    for (int j = 0; j < awardsWListLines.Count; j++)
+                    {
+                      Hashtable awardLine = (Hashtable)awardsWListLines[j];
+                      string awardLineName = (string)awardLine["award"];
+                      string awardLineWho = (string)awardLine["who"];
+                      string awardLineWhat = (string)awardLine["what"];
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        awardLineName = awardLineName.Trim().Replace("\n", string.Empty);
+                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim() + awardWMainYear;
+                      }
+                      else
+                      {
+                        awardLineName = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWho))
+                      {
+                        awardLineWho = Regex.Replace(awardLineWho, @"<\/a>[^<]+?<span[^>]+?>\s*\(\d{4}\)\s*<\/span>", " ");
+                        awardLineWho = awardLineWho.Trim().Replace("\n", string.Empty).Replace("</a>", ", ");
+                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWho = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWhat))
+                      {
+                        awardLineWhat = awardLineWhat.Trim().Replace("\n", string.Empty);
+                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWhat = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? string.Empty : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? string.Empty : " - " + awardLineWhat) + "\n";
+                        Log.Debug("IMDB Award (W): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            // Nominate
+            ArrayList awardsNList = Parse(awardMainBlock, rx_awards_listNblock);
+            if (awardsNList != null && awardsNList.Count > 0)
+            {
+              for (int k = 0; k < awardsNList.Count; k++)
+              {
+                Hashtable awardNMain = (Hashtable)awardsNList[k];
+                string awardNMainYear = (string)awardNMain["awardyear"];
+                string awardNMainBlock = (string)awardNMain["block"];
+                if (!string.IsNullOrEmpty(awardNMainBlock))
+                {
+                  _awardsList = _awardsList + "Nominated:\n";
+                  ArrayList awardsNListLines = Parse(awardNMainBlock, rx_awards_line);
+                  if (awardsNListLines != null && awardsNListLines.Count > 0)
+                  {
+                    if (!string.IsNullOrEmpty(awardNMainYear))
+                    {
+                      awardNMainYear = awardNMainYear.Trim().Replace("\n", string.Empty);
+                      awardNMainYear = Utils.stripHTMLtags(awardNMainYear);
+                      awardNMainYear = Regex.Replace(awardNMainYear, @"[ ]{2,}", " ").Trim();
+                      awardNMainYear = " (" + awardNMainYear + ")"; 
+                    }
+                    else
+                    {
+                      awardNMainYear = string.Empty;
+                    }
+                    for (int j = 0; j < awardsNListLines.Count; j++)
+                    {
+                      Hashtable awardLine = (Hashtable)awardsNListLines[j];
+                      string awardLineName = (string)awardLine["award"];
+                      string awardLineWho = (string)awardLine["who"];
+                      string awardLineWhat = (string)awardLine["what"];
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        awardLineName = awardLineName.Trim().Replace("\n", string.Empty);
+                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim() + awardNMainYear;
+                      }
+                      else
+                      {
+                        awardLineName = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWho))
+                      {
+                        awardLineWho = Regex.Replace(awardLineWho, @"<\/a>[^<]+?<span[^>]+?>\s*\(\d{4}\)\s*<\/span>", " ");
+                        awardLineWho = awardLineWho.Trim().Replace("\n", string.Empty).Replace("</a>", ", ");
+                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWho = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWhat))
+                      {
+                        awardLineWhat = awardLineWhat.Trim().Replace("\n", string.Empty);
+                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWhat = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? string.Empty : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? string.Empty : " - " + awardLineWhat) + "\n";
+                        Log.Debug("IMDB Award (N): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      if (!string.IsNullOrEmpty(_awardsList))
+      {
+        return "Awards:\n" + _awardsList;
+      }
+    }
+    catch (Exception ex)
+    {
+      Log.Debug("IMDB Script GetAwards error: {0}", ex.Message);
+    }
+    return string.Empty;
+  }
+
+  #endregion
+
   #region IMDBMovieActorsList
 
   public ArrayList GetIMDBMovieActorsList(string imdbMovieID, bool shortActorsList)
   {
     string absUri = string.Empty;
     ArrayList actorList = new ArrayList();
-    // string movieURL = string.Format("http://www.imdb.com/title/{0}/combined", imdbMovieID);
-    string movieURL = string.Format("http://www.imdb.com/title/{0}/reference", imdbMovieID);
+    string movieURL = string.Format("http://www.imdb.com/title/{0}/combined", imdbMovieID);
     string strBodyActors = GetPage(movieURL, "utf-8", out absUri);
 
     if (string.IsNullOrEmpty(strBodyActors))
@@ -1046,19 +1134,18 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     // Director
     string strDirectorImdbId = string.Empty;
     string strDirectorName = string.Empty;
-    // string regexBlockPattern = @"name=""director[s]""(?<directors_block>.*?)<h5>";
-    string regexBlockPattern = @"name=""directors?""(?<directors_block>[\s\S]+?)<h[45]\sname";
-    // string regexPattern = @"<a\s+href=""/name/(?<idDirector>nm\d{7})/""[^>]*>(?<movieDirectors>[^<]+)</a>";
-    string regexPattern = @"<a\s+href=""\/name\/(?<idDirector>nm\d{7})\/[^>]*>(?<movieDirectors>[^<]+)<\/a>";
+    string regexBlockPattern = @"name=.directors?.(?<directors_block>.*?)<h\d";
+    string regexPattern = @"<a\s+href=.\/name\/(?<idDirector>nm\d{7})\/.[^>]*>(?<movieDirectors>[^<]+)<\/a>";
     string regexBlock = Regex.Match(HttpUtility.HtmlDecode(strBodyActors),
-      regexBlockPattern, RegexOptions.Singleline).Groups["directors_block"].Value;
+                        regexBlockPattern, RegexOptions.Singleline).Groups["directors_block"].Value;
     strDirectorImdbId = Regex.Match(regexBlock, regexPattern, RegexOptions.Singleline).Groups["idDirector"].Value;
     strDirectorName = Regex.Match(regexBlock, regexPattern, RegexOptions.Singleline).Groups["movieDirectors"].Value;
+    strDirectorName = CleanCrlf(strDirectorName);
 
-    if (strDirectorImdbId != string.Empty)
+    if (!string.IsNullOrEmpty(strDirectorImdbId))
     {
-      string strKDirectorName = GetActorKinopiskName(strDirectorName);
-      if (strKDirectorName != string.Empty)
+      string strKDirectorName = GetPersonName(strDirectorName);
+      if (!string.IsNullOrEmpty(strKDirectorName))
       {
         strDirectorName = strKDirectorName;
       }
@@ -1067,13 +1154,11 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
 
     //Writers
-    // regexBlockPattern = @"<h5>Writer[s]?[^:]*:</h5>[^<]*(?<writers_block>.*?)</div>";
-    regexBlockPattern = @"name=""writers?""(?<writers_block>[\s\S]+?)<h[45]\sname";
+    regexBlockPattern = @"name=.writers?.(?<writers_block>.*?)<h\d";
     regexBlock = Regex.Match(HttpUtility.HtmlDecode(strBodyActors),
-      regexBlockPattern, RegexOptions.Singleline).Groups["writers_block"].Value;
+                 regexBlockPattern, RegexOptions.Singleline).Groups["writers_block"].Value;
 
-    // regexPattern = @"href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>[^(]*(?<wrole>[^)]*\))|href=""/name/(?<imdbWriterId>nm\d{7})/[^>]*>(?<writer>[^<]+)</a>(?<wrole>)";
-    regexPattern = @"href=""\/name\/(?<imdbWriterId>nm\d{7})\/[^>]*>(?<writer>[^<]+)<\/a>(?:[^(]*?(?<wrole>\(as[^)]*\)))?";
+    regexPattern = @"href=.\/name\/(?<imdbWriterId>nm\d{7})\/[^>]*>(?<writer>[^<]+)<\/a>[^(]*(?<wrole>[^)]*\))|href=.\/name\/(?<imdbWriterId>nm\d{7})\/[^>]*>(?<writer>[^<]+)<\/a>(?<wrole>)";
     MatchCollection mc = Regex.Matches(regexBlock, regexPattern);
 
     if (mc.Count != 0)
@@ -1085,8 +1170,9 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
         string strWriterName = string.Empty;
         strWriterName = HttpUtility.HtmlDecode(m.Groups["writer"].Value.Trim());
+        strWriterName = CleanCrlf(strWriterName).Trim();
 
-        string strKWriterName = GetActorKinopiskName(strWriterName);
+        string strKWriterName = GetPersonName(strWriterName);
         if (strKWriterName != string.Empty)
         {
           strWriterName = strKWriterName;
@@ -1094,6 +1180,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
         string writerRole = string.Empty;
         writerRole = HttpUtility.HtmlDecode(m.Groups["wrole"].Value.Trim());
+        writerRole = CleanCrlf(writerRole).Trim();
 
         bool found = false;
 
@@ -1136,10 +1223,8 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     }
 
     // cast
-    // regexBlockPattern = @"<table class=""cast"">.*?</table>|<table class=""cast_list"">.*?</table>";
-    regexBlockPattern = @"<table class=""cast_list"">[\s\S]+?<\/table>";
-    // regexPattern = @"<td[^<]*<a\s+href=""/name/(?<imdbActorID>nm\d{7})/""[^>]*>(?<actor>[^<]*)</a>.*?<td.class=""char"">(?<role>.*?)<*?</td>";
-    regexPattern = @"<td[^<]+?actor[^<]+?<a\s+href=""\/name\/(?<imdbActorID>nm\d{7})\/[^>]+?>[^>]+?name[^>]+?>(?<actor>[^<]*)<\/span>[\s\S]+?td class=.character.>(?<role>[\s\S]+?)<*?<\/td>";
+    regexBlockPattern = @"<table class=.cast(?:_list)?"">.*?<\/table>";
+    regexPattern = @"<td[^<]*<a\s+href=.\/name\/(?<imdbActorID>nm\d{7})\/[^>]*?>[\s\S]+?itemprop=.name.>(?<actor>[^<]*)<\/span>[\s\S]+?<td.class=.char(?:acter)?.>(?<role>.+?)<*?<\/td>";
     Match castBlock = Regex.Match(strBodyActors, regexBlockPattern, RegexOptions.Singleline);
     string strCastBlock = HttpUtility.HtmlDecode(castBlock.Value);
 
@@ -1155,13 +1240,13 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
         {
           string strActorID = string.Empty;
           strActorID = m.Groups["imdbActorID"].Value;
-          strActorID = Utils.stripHTMLtags(strActorID).Trim();
+          strActorID = CleanCrlf(strActorID).Trim();
 
           string strActorName = string.Empty;
           strActorName = m.Groups["actor"].Value;
-          strActorName = Utils.stripHTMLtags(strActorName).Trim();
+          strActorName = CleanCrlf(strActorName).Trim();
 
-          string strKActorName = GetActorKinopiskName(strActorName);
+          string strKActorName = GetPersonName(strActorName);
           if (strKActorName != string.Empty)
           {
             strActorName = strKActorName;
@@ -1169,9 +1254,9 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
                  
           string strRole = string.Empty;
           strRole = m.Groups["role"].Value;
-          strRole = HttpUtility.HtmlDecode(strRole);
-          strRole = Utils.stripHTMLtags(strRole).Trim().Replace("\n", "");
+          strRole = CleanCrlf(Utils.stripHTMLtags(strRole).Trim().Replace("\n", ""));
           strRole = strRole.Replace(",", ";").Replace("  ", "");
+          strRole = Regex.Replace(strRole, @"\t|\n|\r", string.Empty).Trim();
 
           if (!strRole.StartsWith("("))
           {
@@ -1225,67 +1310,6 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
   #endregion
 
-  #region Kinopoisk Actor Name
-
-  private string GetActorKinopiskName(string Name)
-  {
-    Log.Debug("Version: actor.name.kinopoisk.ru {0}.", strKinopoiskVersion);
-
-    // Kinopoisk Actor URL
-    string absoluteUri;
-    string KPURL  = string.Format("http://www.kinopoisk.ru/index.php?kp_query={0}", Name);
-    string KPhtml = GetKPPage(KPURL, "windows-1251", out absoluteUri);
-    string Result = string.Empty;
-    KPURL = string.Empty;
-
-    HTMLParser KParser = new HTMLParser(KPhtml);
-    string KPvalue      = string.Empty;
-    KParser.skipToEndOf("<div class=\"info\">");
-    KParser.extractTo("<div class=\"search_results\">", ref KPvalue);
-    KParser.Content = KPvalue;
-    KPvalue = string.Empty;
-
-    if (KParser.skipToEndOf("<p class=\"name\">") &&
-        KParser.skipToEndOf("<a href=\"") &&
-        KParser.skipToEndOf("name/") &&
-        KParser.extractTo("/", ref KPvalue))
-    {
-      KPvalue = KPvalue.Trim();
-      if (KPvalue != string.Empty)
-      {
-        KPURL = string.Format("http://www.kinopoisk.ru/name/{0}/view_info/ok/",KPvalue);
-      }
-    }
-    Log.Debug(":: {1} URL: {0}", string.IsNullOrEmpty(KPURL) ? "None" : KPURL , Name);
-
-    // Kinopoisk Actor name & page
-    if (KPURL != string.Empty)
-    {
-       KPhtml = GetKPPage(KPURL, "windows-1251", out absoluteUri);
-       KParser.Content = KPhtml;
-       KPvalue = string.Empty;
-
-       KParser.skipToEndOf("<div id=\"headerPeople\" class=\"country_num\">");
-       KParser.extractTo("id=\"ta_actor_notice\">", ref KPvalue);
-       KParser.Content = KPvalue;
-       KPvalue = string.Empty;
-
-       if (KParser.skipToEndOf("itemprop=\"name\">") &&
-           KParser.extractTo("</h1>", ref KPvalue))
-       {
-          KPvalue = new HTMLUtil().ConvertHTMLToAnsi(KPvalue);
-          KPvalue = Utils.RemoveParenthesis(KPvalue).Trim();
-          KPvalue = HttpUtility.HtmlDecode(KPvalue.Trim());
-          KPvalue = Utils.stripHTMLtags(KPvalue);
-          Log.Debug(":: {1} IMDB Name -> Kinopoisk Name: {0}", KPvalue, Name);
-          Result = KPvalue.Trim();
-       }
-    }
-    return Result;
-  }
-
-  #endregion
-
   private ArrayList Parse(string input, string pattern) {
       ArrayList keyedMatches  = new ArrayList();
       try {
@@ -1312,6 +1336,7 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
 
   private string GetPage(string strUrl, string strEncode, out string absoluteUri)
   {
+    // Log.Debug("*** {0}", strUrl);
     string strBody = "";
     absoluteUri = string.Empty;
     Stream receiveStream = null;
@@ -1381,72 +1406,717 @@ internal class InternalActorsGrabber : IIMDBInternalActorsScriptGrabber
     return strBody;
   }
 
-  private string GetKPPage(string strUrl, string strEncode, out string absoluteUri)
+  #region Kinopoisk
+
+  #region Kinopoisk Parameters
+
+  private const string KP_BaseUrl = "https://ext.kinopoisk.ru/ios/5.0.0/";
+  private const string KP_ImageUrl = "https://st.kp.yandex.net/images/";
+  private const string KP_Agent = "Android client(4.4 / api19), ru.kinopoisk/4.2.0 (55)";
+  private const string KP_Android = "19";
+  private const string KP_Plex = "2.0.0";
+
+  #endregion Kinopoisk Parameters
+
+  #region Kinopoisk Const
+
+  public const string KP_Search = KP_BaseUrl + "getKPSearchInPeople?keyword=";
+  public const string KP_Details = KP_BaseUrl + "getKPPeopleDetailView?peopleID=";
+  public const string KP_Awards = KP_BaseUrl + "getKPAwards?peopleID=";
+
+  #endregion Kinopoisk Const
+
+  public struct KPPerson
   {
-    string strBody = "";
-    absoluteUri = string.Empty;
-    Stream receiveStream = null;
-    StreamReader sr = null;
-    WebResponse result = null;
+    public string Id;
+    public string Name;
+    public string Birthday;
+    public string Birthplace;
+    public string Sign;
+    public string Death;
+    public string Deathplace;
+    public string Growth;
+    public string Sex;
+    public string Profession;
+    public string Trivia;
+    public string Thumb;
+  } // EOC
+
+  private static string GetPersonName(string name)
+  {
+    KPPerson person = GetPersonByName(name);
+    if (!string.IsNullOrEmpty(person.Id))
+    {
+      return person.Name;
+    }
+    return string.Empty;
+  }
+
+  private static KPPerson GetPersonByName(string name, bool bio = false)
+  {
+    KPPerson person = new KPPerson();
+
+    if (string.IsNullOrEmpty(name))
+    {
+      return person;
+    }
+
+    #region Search People
+
+    string json = string.Empty;
     try
     {
-      // Make the Webrequest
-      HttpWebRequest req = (HttpWebRequest)WebRequest.Create(strUrl);
-
-      try
-      {
-        req.Proxy.Credentials = CredentialCache.DefaultCredentials;
-        req.UserAgent         = "Mozilla/5.0 (Windows; U; MSIE 7.0; Windows NT 6.0; en-US)";
-        req.Accept            = "text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5";
-        req.Referer           = "http:\\www.kinopoisk.ru";
-        req.Timeout           = 20000;
-        req.ReadWriteTimeout  = req.Timeout;
-        req.Headers.Add("Accept-Language", "ru-RU,ru;q=0.8,en-US;q=0.6,en;q=0.5");
-      }
-      catch (Exception) { }
-      result = req.GetResponse();
-      receiveStream = result.GetResponseStream();
-
-      // Encoding: depends on selected page
-      Encoding encode = Encoding.GetEncoding(strEncode);
-      using (sr = new StreamReader(receiveStream, encode))
-      {
-        strBody = sr.ReadToEnd();
-      }
-
-      absoluteUri = result.ResponseUri.AbsoluteUri;
+      string sRequest = MakeKinopoiskUrl(KP_Search, name);
+      json = GetKinopoiskResponse(sRequest);
     }
-    catch (Exception ex)
+    catch
     {
-      Log.Error("InternalActorsScriptGrabber Error retrieving WebPage: {0} err:{1}", strUrl, ex.Message);
+      json = string.Empty;
+    }
+
+    if (string.IsNullOrEmpty(json))
+    {
+      return person;
+    }
+
+    // Search
+    PeoplesSearch Actors = JsonConvert.DeserializeObject<PeoplesSearch>(json);
+    if (Actors != null && Actors.Data != null && Actors.Data.SearchPeople != null && Actors.Data.SearchPeople.Count > 0)
+    {
+      foreach (SearchPeople people in Actors.Data.SearchPeople)
+      {
+        if (string.IsNullOrEmpty(people.NameEN) && !string.IsNullOrEmpty(people.NameRU))
+        {
+          people.NameEN = Translit(people.NameRU);
+        }
+        if (!string.IsNullOrEmpty(people.NameRU) && people.NameEN.ToUpperInvariant() == name.ToUpperInvariant())
+        {
+          person.Id = people.Id;
+          person.Name = people.NameRU;
+          person.Profession = people.Description;
+          Log.Debug(":: {0} IMDB Name -> Kinopoisk Name: {1} / {2} - {3}", name, people.NameRU, people.NameEN, strKinopoiskVersion);
+          break;
+        }
+      }
+    }
+
+    #endregion
+
+    if (!bio)
+    {
+      return person;
+    }
+
+    #region Details for People
+
+    json = string.Empty;
+    try
+    {
+      string sRequest = MakeKinopoiskUrl(KP_Details, person.Id);
+      json = GetKinopoiskResponse(sRequest);
+    }
+    catch
+    {
+      json = string.Empty;
+    }
+
+    if (string.IsNullOrEmpty(json))
+    {
+      return person;
+    }
+
+    // Details
+    DetailsOfPeople Actor = JsonConvert.DeserializeObject<DetailsOfPeople>(json);
+    if (Actor != null && Actor.Data != null && Actor.Data != null)
+    {
+      if (!string.IsNullOrEmpty(Actor.Data.NameRU))
+      {
+        person.Sign = GetHoroSign(Actor.Data.Birthday);
+        person.Birthday = Actor.Data.Birthday;
+        person.Birthplace = Actor.Data.Birthplace;
+        person.Death = Actor.Data.Death;
+        person.Deathplace = Actor.Data.Deathplace;
+        person.Growth = (Actor.Data.Growth > 0 ? string.Format("{0:0.00}", (Actor.Data.Growth*1.0/100.0)) : string.Empty);
+        person.Sex = (Actor.Data.Sex == "male" ? "Мужчина" : "Женщина");
+        person.Profession = Actor.Data.Profession;
+        person.Trivia = string.Empty;
+        person.Thumb = GetKPImageURL(Actor.Data.PosterURL);
+
+        if (Actor.Data.Trivia != null)
+        {
+          foreach (string trivia in Actor.Data.Trivia)
+          {
+            person.Trivia = person.Trivia + "- " + trivia + "\n";
+          }
+        }
+
+        if (Actor.Data.HasAwards > 0)
+        {
+          person.Trivia = person.Trivia + "\n" + GetKinopoiskAwards(person.Id);
+        }
+      }
+    }
+
+    #endregion
+
+    return person;
+  }
+
+  public static string GetKinopoiskAwards(string url)
+  {
+    if (string.IsNullOrEmpty(url))
+    {
+      return string.Empty;
+    }
+
+    string json = string.Empty;
+    try
+    {
+      string sRequest = MakeKinopoiskUrl(KP_Awards, url);
+      json = GetKinopoiskResponse(sRequest);
+    }
+    catch
+    {
+      json = string.Empty;
+    }
+
+    if (string.IsNullOrEmpty(json))
+    {
+      return string.Empty;
+    }
+
+    try
+    {
+      AwardsData AwardsData = JsonConvert.DeserializeObject<AwardsData>(json);
+      if (AwardsData == null || AwardsData.Data == null || AwardsData.Data.Awards == null || AwardsData.Data.Awards.Count <= 0)
+      {
+        return string.Empty;
+      }
+      string _awardsList = "Награды:\n"; 
+      foreach (object award in AwardsData.Data.Awards)
+      {
+        string awardname = string.Empty;
+        string awardline = award.ToString();
+        string pattern = @"({[^""]+?"")([^""]+?)("":\s\[)";
+
+        Match match = Regex.Match(awardline, pattern, RegexOptions.IgnoreCase);
+        if (match.Success)
+        {
+          awardname = match.Groups[2].Value;
+          awardline = Regex.Replace(awardline, pattern, "$1awards$3");
+
+          Award kp_award = JsonConvert.DeserializeObject<Award>(awardline);
+          if (kp_award != null && kp_award.Awards != null && kp_award.Awards.Count > 0)
+          {
+            string strWon = string.Empty;
+            string strNom = string.Empty;
+
+            _awardsList = _awardsList + awardname + "\n"; 
+
+            foreach (AwardData awarddata in kp_award.Awards)
+            {
+              if (awarddata.IsNomination == 0)
+              {
+                strWon = strWon + "- " + awarddata.Title + (!string.IsNullOrEmpty(awarddata.SubTitle) ? " - " + awarddata.SubTitle : string.Empty) + "\n";
+                Log.Debug("Award (W): {0} - {1} {2}", awardname, awarddata.Title, awarddata.SubTitle);
+              }
+              else
+              {
+                strNom = strNom + "- " + awarddata.Title + (!string.IsNullOrEmpty(awarddata.SubTitle) ? " - " + awarddata.SubTitle : string.Empty) + "\n";
+                Log.Debug("Award (N): {0} - {1} {2}", awardname, awarddata.Title, awarddata.SubTitle);
+              }
+            }
+
+            if (!string.IsNullOrEmpty(strWon))
+            {
+              _awardsList = _awardsList + "Победитель:\n" + strWon;
+            }
+            if (!string.IsNullOrEmpty(strNom))
+            {
+              _awardsList = _awardsList + "Номинации:\n" + strNom;
+            }
+          }
+        }
+      }
+      return _awardsList;
+    }
+    catch { }
+
+    return string.Empty;
+  }
+
+  private static string GetHoroSign(string sDate)
+  {
+    if (string.IsNullOrEmpty(sDate))
+    {
+      return string.Empty;
+    }
+
+    DateTime dt;
+    if (!DateTime.TryParseExact(sDate, "dd.MM.yyyy", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out dt))
+    {
+      return string.Empty;
+    }
+
+    int month = dt.Month;
+    int day = dt.Day;
+    switch (month)
+    {
+      case 1:
+        if (day <= 19)
+          return "Козерог";
+        else
+          return "Водолей";
+      case 2:
+        if (day <= 18)
+          return "Водолей";
+        else
+          return "Рыбы";
+      case 3:
+        if (day <= 20)
+          return "Рыбы";
+        else
+          return "Овен";
+      case 4:
+        if (day <= 19)
+          return "Овен";
+        else
+          return "Телец";
+      case 5:
+        if (day <= 20)
+          return "Телец";
+        else
+          return "Близнецы";
+      case 6:
+        if (day <= 20)
+          return "Близнецы";
+        else
+          return "Рак";
+      case 7:
+        if (day <= 22)
+          return "Рак";
+        else
+          return "Лев";
+      case 8:
+        if (day <= 22)
+          return "Лев";
+        else
+          return "Дева";
+      case 9:
+        if (day <= 22)
+          return "Дева";
+        else
+          return "Весы";
+      case 10:
+        if (day <= 22)
+          return "Весы";
+        else
+          return "Скорпион";
+      case 11:
+        if (day <= 21)
+          return "Скорпион";
+        else
+          return "Стрелец";
+      case 12:
+        if (day <= 21)
+          return "Стрелец";
+        else
+          return "Козерог";
+    }
+    return string.Empty;
+  }
+
+  private static string MakeKinopoiskUrl(string method, string query)
+  {
+    return method + Uri.EscapeDataString(query);
+  }
+
+  private static string GetKinopoiskResponse(string url)
+  {
+    string plexurl = "http://plex.filmingdata.com/reqh";
+    string plexxs = string.Empty;
+    string plexxt = string.Empty;
+
+    System.Net.HttpWebRequest webRequest;
+    try
+    {
+      webRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(plexurl);
+      webRequest.Headers.Clear();
+      webRequest.Timeout = 5000;
+      webRequest.Method = System.Net.WebRequestMethods.Http.Head;
+
+      webRequest.Headers.Add("Pragma", "no-cache");
+      webRequest.Headers.Add("Cache-Control", "no-cache");
+
+      webRequest.Headers.Add("X-Kinopoisk-Url", url);
+      webRequest.Headers.Add("X-Server-ID", KP_Plex);
+      using (System.Net.WebResponse webResponse = webRequest.GetResponse())
+      {
+        plexxs = webResponse.Headers["x-signature"];
+        plexxt = webResponse.Headers["x-timestamp"];
+        webResponse.Close();
+      }
+    }
+    catch
+    {
+      plexxs = string.Empty;
+      plexxt = string.Empty;
     }
     finally
     {
-      if (sr != null)
+      webRequest = null;
+    }
+
+    if (string.IsNullOrEmpty(plexxs) || string.IsNullOrEmpty(plexxt))
+    {
+      return string.Empty;
+    }
+
+    // Log.Debug("GetKinopoiskResponse: {0}", url);
+    string sReturn = string.Empty;
+    System.Net.HttpWebRequest oHttpWebRequest;
+    try
+    {
+      oHttpWebRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
+      oHttpWebRequest.Headers.Clear();
+      oHttpWebRequest.Timeout = 5000;
+      oHttpWebRequest.Method = System.Net.WebRequestMethods.Http.Get;
+
+      oHttpWebRequest.Accept = "application/json";
+      oHttpWebRequest.UserAgent = KP_Agent;
+
+      oHttpWebRequest.Headers.Add("device", "android");
+      oHttpWebRequest.Headers.Add("Android-Api-Version", KP_Android);
+
+      string cd = DateTime.Now.ToString("HH:mm dd.MM.yyyy");
+      oHttpWebRequest.Headers.Add("clientDate", cd);
+
+      oHttpWebRequest.Headers.Add("X-SIGNATURE", plexxs);
+      oHttpWebRequest.Headers.Add("X-TIMESTAMP", plexxt);
+
+      System.Net.HttpWebResponse oResponse = (System.Net.HttpWebResponse)oHttpWebRequest.GetResponse();
+
+      using (System.IO.StreamReader sr = new System.IO.StreamReader(oResponse.GetResponseStream()))
       {
-        try
-        {
-          sr.Close();
-        }
-        catch (Exception) { }
+        sReturn = sr.ReadToEnd();
       }
-      if (receiveStream != null)
+      oResponse.Close();
+    }
+    catch (Exception ex)
+    { 
+      Log.Debug("GetKinopoiskResponse: error {0}", ex.Message);
+    }
+    finally
+    {
+      oHttpWebRequest = null;
+    }
+    // Log.Debug("GetKinopoiskResponse: {0}", sReturn);
+    return sReturn;
+  }
+
+  private static string GetKPImageURL(string url)
+  {
+    if (string.IsNullOrEmpty(url))
+    {
+      return string.Empty;
+    }
+    url = KP_ImageUrl + url;
+
+    string resultUrl = string.Empty;
+    System.Net.HttpWebRequest webRequest;
+    try
+    {
+      webRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(url);
+      webRequest.Headers.Clear();
+      webRequest.Timeout = 5000;
+      webRequest.Method = System.Net.WebRequestMethods.Http.Head;
+
+      webRequest.Headers.Add("Pragma", "no-cache");
+      webRequest.Headers.Add("Cache-Control", "no-cache");
+
+      using (System.Net.WebResponse webResponse = webRequest.GetResponse())
       {
-        try
-        {
-          receiveStream.Close();
-        }
-        catch (Exception) { }
-      }
-      if (result != null)
-      {
-        try
-        {
-          result.Close();
-        }
-        catch (Exception) { }
+        resultUrl = webResponse.ResponseUri.ToString();
+        webResponse.Close();
       }
     }
-    return strBody;
+    catch 
+    { 
+      resultUrl = string.Empty;
+    }
+    finally
+    {
+      webRequest = null;
+    }
+
+    if (!string.IsNullOrEmpty(resultUrl))
+    {
+      if (resultUrl.IndexOf("no-poster") > -1)
+      {
+        resultUrl = string.Empty;
+      }
+    }
+    return resultUrl;
   }
+
+  #region Kinopoisk Classes
+
+  public class SearchPeople
+  {
+    [JsonProperty("id")]
+    public string Id { get; set; }
+
+    [JsonProperty("type")]
+    public string Type { get; set; }
+
+    [JsonProperty("nameRU")]
+    public string NameRU { get; set; }
+
+    [JsonProperty("nameEN")]
+    public string NameEN { get; set; }
+
+    [JsonProperty("description")]
+    public string Description { get; set; }
+
+    [JsonProperty("posterURL")]
+    public string PosterURL { get; set; }
+  }
+
+  public class PeoplesSearchData
+  {
+    [JsonProperty("class")]
+    public string Class { get; set; }
+
+    [JsonProperty("keyword")]
+    public string Keyword { get; set; }
+
+    [JsonProperty("pagesCount")]
+    public int PagesCount { get; set; }
+
+    [JsonProperty("searchPeople")]
+    public List<SearchPeople> SearchPeople { get; set; }
+
+    [JsonProperty("searchPeoplesCountResult")]
+    public int SearchPeoplesCountResult { get; set; }
+  }
+
+  public class PeoplesSearch
+  {
+    [JsonProperty("resultCode")]
+    public int ResultCode { get; set; }
+
+    [JsonProperty("message")]
+    public string Message { get; set; }
+
+    [JsonProperty("data")]
+    public PeoplesSearchData Data { get; set; }
+
+    [JsonProperty("no_cache_flag")]
+    public bool no_cache_flag { get; set; }
+  }
+
+  public class PeopleData
+  {
+    [JsonProperty("class")]
+    public string Class { get; set; }
+
+    [JsonProperty("peopleID")]
+    public string PeopleID { get; set; }
+
+    [JsonProperty("webURL")]
+    public string WebURL { get; set; }
+
+    [JsonProperty("nameRU")]
+    public string NameRU { get; set; }
+
+    [JsonProperty("nameEN")]
+    public string NameEN { get; set; }
+
+    [JsonProperty("sex")]
+    public string Sex { get; set; }
+
+    [JsonProperty("posterURL")]
+    public string PosterURL { get; set; }
+
+    [JsonProperty("growth")]
+    public int Growth { get; set; }
+
+    [JsonProperty("birthday")]
+    public string Birthday { get; set; }
+
+    [JsonProperty("death")]
+    public string Death { get; set; }
+
+    [JsonProperty("age")]
+    public string Age { get; set; }
+
+    [JsonProperty("birthplace")]
+    public string Birthplace { get; set; }
+
+    [JsonProperty("deathplace")]
+    public string Deathplace { get; set; }
+
+    [JsonProperty("hasAwards")]
+    public int HasAwards { get; set; }
+
+    [JsonProperty("profession")]
+    public string Profession { get; set; }
+
+    [JsonProperty("triviaData")]
+    public List<string> Trivia { get; set; }
+  }
+
+  public class DetailsOfPeople
+  {
+    [JsonProperty("resultCode")]
+    public int resultCode { get; set; }
+
+    [JsonProperty("message")]
+    public string message { get; set; }
+
+    [JsonProperty("data")]
+    public PeopleData Data { get; set; }
+
+    [JsonProperty("no_cache_flag")]
+    public bool no_cache_flag { get; set; }
+  }
+
+  public class AwardsData
+  {
+    [JsonProperty("resultCode")]
+    public int ResultCode { get; set; }
+
+    [JsonProperty("message")]
+    public string Message { get; set; }
+
+    [JsonProperty("data")]
+    public AwardsLine Data { get; set; }
+  }
+
+  public class AwardsLine
+  {
+    [JsonProperty("class")]
+    public string Class { get; set; }
+
+    [JsonProperty("items")]
+    public List<object> Awards { get; set; }
+  }
+
+  public class Award
+  {
+    [JsonProperty("awards")]
+    public List<AwardData> Awards { get; set; }
+  }
+
+  public class AwardData
+  {
+    [JsonProperty("title")]
+    public string Title { get; set; }
+
+    [JsonProperty("image")]
+    public string Image { get; set; }
+
+    [JsonProperty("subTitle")]
+    public string SubTitle { get; set; }
+
+    [JsonProperty("peopleID")]
+    public string PeopleId { get; set; }
+
+    [JsonProperty("isNomination")]
+    public int IsNomination { get; set; }
+  }
+
+  #endregion
+
+  #region Translit
+
+  private static string Translit(string strValue)
+  {
+      return strValue.
+// Малые
+        Replace("а","a").
+        Replace("б","b").
+        Replace("в","v").
+        Replace("г","g").
+        Replace("д","d").
+        Replace("е","e").
+//               Replace("ё","e").
+        Replace("ё","yo").
+        Replace("ж","zh").
+        Replace("з","z").
+        Replace("и","i").
+        Replace("й","y").
+        Replace("к","k").
+        Replace("л","l").
+        Replace("м","m").
+        Replace("н","n").
+        Replace("о","o").
+        Replace("п","p").
+        Replace("р","r").
+        Replace("с","s").
+        Replace("т","t").
+        Replace("у","u").
+        Replace("ф","f").
+//               Replace("х","h").
+        Replace("х","kh").
+        Replace("ц","ts").
+        Replace("ч","ch").
+        Replace("ш","sh").
+        Replace("щ","shch").
+        Replace("ь","").
+        Replace("ъ","'").
+        Replace("ы","y").
+        Replace("э","e").
+        Replace("ю","yu").
+        Replace("я","ya").
+// Большие
+        Replace("А","A").
+        Replace("Б","B").
+        Replace("В","V").
+        Replace("Г","G").
+        Replace("Д","D").
+        Replace("Е","E").
+//               Replace("Ё","E").
+        Replace("Ё","Yo").
+        Replace("Ж","Zh").
+        Replace("З","Z").
+        Replace("И","I").
+        Replace("Й","Y").
+        Replace("К","K").
+        Replace("Л","L").
+        Replace("М","M").
+        Replace("Н","N").
+        Replace("О","O").
+        Replace("П","P").
+        Replace("Р","R").
+        Replace("С","S").
+        Replace("Т","T").
+        Replace("У","U").
+        Replace("Ф","F").
+//               Replace("Х","H").
+        Replace("Х","Kh").
+        Replace("Ц","Ts").
+        Replace("Ч","Ch").
+        Replace("Ш","Sh"). 
+        Replace("Щ","Shch").
+        Replace("Ь","").
+        Replace("Ъ","'").
+        Replace("Ы","Y").
+        Replace("Э","E").
+        Replace("Ю","Yu").
+        Replace("Я","Ya").
+// Украинские
+        Replace("і","i").
+        Replace("ї","i").
+        Replace("є","ie").
+        Replace("ґ","g'").
+        Replace("І","I").
+        Replace("Ї","Yi").
+        Replace("Є","Ye").
+        Replace("Ґ","G'");
+  }
+
+  #endregion
+
+  #endregion
 }

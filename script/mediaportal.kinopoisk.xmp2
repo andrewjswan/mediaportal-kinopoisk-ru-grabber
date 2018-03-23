@@ -3,11 +3,11 @@
   <Version>2.0</Version>
   <Groups>
     <Items>
-      <GroupItem Name="Kinopoisk grabber">
+      <GroupItem Name="Russian grabbers">
         <ParentGroup />
-        <DisplayName>Kinopoisk grabber</DisplayName>
+        <DisplayName>Russian grabbers</DisplayName>
         <DefaulChecked>true</DefaulChecked>
-        <Description>Kinopoisk grabber</Description>
+        <Description>Russian grabbers</Description>
         <Files>
           <Items>
             <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
@@ -24,6 +24,20 @@
               <ZipFileName>Installer{CopyFile}\{05a95712-28fb-4a49-abc6-40524c4d6750}-kinopoisk_ru.csscript.config</ZipFileName>
               <DestinationFilename>%Config%\scripts\MovieInfo\kinopoisk_ru.csscript.config</DestinationFilename>
             </FileItem>
+            <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+              <Param1 />
+              <UpdateOption>OverwriteIfOlder</UpdateOption>
+              <LocalFileName>..\Scripts\Movieinfo\KTI_MDB.csscript</LocalFileName>
+              <ZipFileName>Installer{CopyFile}\{6c49c948-cbc5-465e-adcf-ff1ed67c1955}-KTI_MDB.csscript</ZipFileName>
+              <DestinationFilename>%Config%\scripts\MovieInfo\KTI_MDB.csscript</DestinationFilename>
+            </FileItem>
+            <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+              <Param1 />
+              <UpdateOption>OverwriteIfOlder</UpdateOption>
+              <LocalFileName>..\Scripts\Movieinfo\TI_MDB.csscript</LocalFileName>
+              <ZipFileName>Installer{CopyFile}\{e90fa5ae-473a-4e31-8092-b0017dfe4e3d}-TI_MDB.csscript</ZipFileName>
+              <DestinationFilename>%Config%\scripts\MovieInfo\TI_MDB.csscript</DestinationFilename>
+            </FileItem>
           </Items>
         </Files>
       </GroupItem>
@@ -31,7 +45,7 @@
         <ParentGroup />
         <DisplayName>Mediaportal internal grabbers</DisplayName>
         <DefaulChecked>false</DefaulChecked>
-        <Description>Mediaportal internal grabbers</Description>
+        <Description>Mediaportal internal russian grabbers</Description>
         <Files>
           <Items>
             <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
@@ -47,6 +61,23 @@
               <LocalFileName>..\Scripts\InternalMovieImagesGrabber.csscript</LocalFileName>
               <ZipFileName>Installer{CopyFile}\{17bc4912-e311-4788-92b1-7973e326bb6a}-InternalMovieImagesGrabber.csscript</ZipFileName>
               <DestinationFilename>%Config%\scripts\InternalMovieImagesGrabber.csscript</DestinationFilename>
+            </FileItem>
+          </Items>
+        </Files>
+      </GroupItem>
+      <GroupItem Name="Libraries">
+        <ParentGroup />
+        <DisplayName>Libraries</DisplayName>
+        <DefaulChecked>true</DefaulChecked>
+        <Description>Libraries</Description>
+        <Files>
+          <Items>
+            <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+              <Param1 />
+              <UpdateOption>NeverOverwrite</UpdateOption>
+              <LocalFileName>..\external\Newtonsoft.Json.dll</LocalFileName>
+              <ZipFileName>Installer{CopyFile}\{42338cde-bd2d-41bd-8b10-e9ab044579a9}-Newtonsoft.Json.dll</ZipFileName>
+              <DestinationFilename>%Base%\Newtonsoft.Json.dll</DestinationFilename>
             </FileItem>
           </Items>
         </Files>
@@ -118,7 +149,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
           <Items />
         </Actions>
         <IncludedGroups>
-          <string>Kinopoisk grabber</string>
+          <string>Russian grabbers</string>
           <string>Mediaportal internal grabbers</string>
         </IncludedGroups>
         <PanelName>Tree View Selector</PanelName>
@@ -219,7 +250,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
     <Items />
   </PluginDependencies>
   <GeneralInfo>
-    <Name>Kinopoisk grabber for Mediaportal</Name>
+    <Name>Russian grabbers for Mediaportal</Name>
     <Id>1dd1069f-4364-484e-84c6-91d3005d960e</Id>
     <Author>ajs</Author>
     <HomePage>https://github.com/andrewjswan/mediaportal-kinopoisk-ru-grabber</HomePage>
@@ -227,15 +258,15 @@ Click Next to continue or Cancel to exit Setup.</Value>
     <UpdateUrl>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/script/mediaportal.kinopoisk.xml</UpdateUrl>
     <Version>
       <Major>1</Major>
-      <Minor>0</Minor>
+      <Minor>1</Minor>
       <Build>0</Build>
-      <Revision>110</Revision>
+      <Revision>13</Revision>
     </Version>
-    <ExtensionDescription>Kinopoisk grabber for Mediaportal</ExtensionDescription>
-    <VersionDescription>Fixes for studios and MP 1.17</VersionDescription>
+    <ExtensionDescription>Russian grabbers for Mediaportal</ExtensionDescription>
+    <VersionDescription>New russian grabbers, search by Kinopoisk/TMDB/IMDB ...</VersionDescription>
     <DevelopmentStatus>Stable</DevelopmentStatus>
     <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
-    <ReleaseDate>2017-11-21T13:46:50</ReleaseDate>
+    <ReleaseDate>2018-03-23T13:46:50</ReleaseDate>
     <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
     <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
     <Params>
@@ -289,6 +320,20 @@ Click Next to continue or Cancel to exit Setup.</Value>
       <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
+        <LocalFileName>..\Scripts\Movieinfo\KTI_MDB.csscript</LocalFileName>
+        <ZipFileName>Installer{CopyFile}\{6c49c948-cbc5-465e-adcf-ff1ed67c1955}-KTI_MDB.csscript</ZipFileName>
+        <DestinationFilename>%Config%\scripts\MovieInfo\KTI_MDB.csscript</DestinationFilename>
+      </FileItem>
+      <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+        <Param1 />
+        <UpdateOption>OverwriteIfOlder</UpdateOption>
+        <LocalFileName>..\Scripts\Movieinfo\TI_MDB.csscript</LocalFileName>
+        <ZipFileName>Installer{CopyFile}\{e90fa5ae-473a-4e31-8092-b0017dfe4e3d}-TI_MDB.csscript</ZipFileName>
+        <DestinationFilename>%Config%\scripts\MovieInfo\TI_MDB.csscript</DestinationFilename>
+      </FileItem>
+      <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+        <Param1 />
+        <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>..\Scripts\InternalActorMoviesGrabber.csscript</LocalFileName>
         <ZipFileName>Installer{CopyFile}\{9ce05927-9248-42dc-9fc7-34c3e22c01d6}-InternalActorMoviesGrabber.csscript</ZipFileName>
         <DestinationFilename>%Config%\scripts\InternalActorMoviesGrabber.csscript</DestinationFilename>
@@ -300,11 +345,18 @@ Click Next to continue or Cancel to exit Setup.</Value>
         <ZipFileName>Installer{CopyFile}\{17bc4912-e311-4788-92b1-7973e326bb6a}-InternalMovieImagesGrabber.csscript</ZipFileName>
         <DestinationFilename>%Config%\scripts\InternalMovieImagesGrabber.csscript</DestinationFilename>
       </FileItem>
+      <FileItem InstallType="CopyFile" SystemFile="false" Modified="true">
+        <Param1 />
+        <UpdateOption>NeverOverwrite</UpdateOption>
+        <LocalFileName>..\external\Newtonsoft.Json.dll</LocalFileName>
+        <ZipFileName>Installer{CopyFile}\{42338cde-bd2d-41bd-8b10-e9ab044579a9}-Newtonsoft.Json.dll</ZipFileName>
+        <DestinationFilename>%Base%\Newtonsoft.Json.dll</DestinationFilename>
+      </FileItem>
       <FileItem InstallType="CopyFile" SystemFile="true" Modified="true">
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>pack.icon.png</LocalFileName>
-        <ZipFileName>Installer{CopyFile}\{f0ad3f12-5fb3-40b5-9cbc-e2369c047987}-pack.icon.png</ZipFileName>
+        <ZipFileName>Installer{CopyFile}\{56991ea0-d349-4351-94dc-445e02ddcfaa}-pack.icon.png</ZipFileName>
         <DestinationFilename />
       </FileItem>
     </Items>

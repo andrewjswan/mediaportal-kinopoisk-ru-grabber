@@ -21,7 +21,7 @@ using System.Web;
 internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
   const string strGrabber = "TI_MDB";
-  const string strGrabberVersion = "20180219.I";
+  const string strGrabberVersion = "20180227.I";
 
   public Grabber()
   {
@@ -39,9 +39,13 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       {
         Log.Debug("{0} Found: [{1}] {2} - {3}", strGrabber, aUrl.url, aUrl.title, HideAPIKey(GetTMDBMovieDetailsURL(aUrl.url)));
 
-        MediaPortal.Video.Database.IMDB.IMDBUrl url = new MediaPortal.Video.Database.IMDB.IMDBUrl(
-          GetTMDBMovieDetailsURL(aUrl.url), aUrl.title, strGrabber);
+        MediaPortal.Video.Database.IMDB.IMDBUrl url = new MediaPortal.Video.Database.IMDB.IMDBUrl(aUrl.url, aUrl.title, strGrabber);
         elements.Add(url);
+
+        if (elements.Count >= iLimit)
+        {
+          break;
+        }
       }
     }
     catch (Exception ex)
@@ -54,24 +58,6 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
 
   bool MediaPortal.Video.Database.IIMDBScriptGrabber.GetDetails(IMDB.IMDBUrl url, ref IMDBMovie movieDetails)
   {
-    // preces the web page defined by the url
-    // ................
-    // ................
-    // then fill the database
-    // movieDetails.Year
-    // movieDetails.Genre
-    // movieDetails.Votes
-    // movieDetails.Top250
-    // movieDetails.TagLine
-    // movieDetails.PlotOutline
-    // movieDetails.ThumbURL
-    // movieDetails.Plot
-    // movieDetails.Cast
-    // movieDetails.RunTime = ....
-    // movieDetails.MPARating = ......
-    // movieDetails.MovieCollection = // MP1-4761
-    // movieDetails.TMDBNumber = // MP1-4761
-
     Log.Debug("{0} Start Get info by url {1}", strGrabber, HideAPIKey(url.URL));
     try
     {
@@ -83,8 +69,8 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       GetCast(ref adetails);
       GetTMDBRelease(ref adetails);
 
-      //Fill movieDetails
-      string sActors = "";
+      // TMDB Actors as Role
+      string sActors = string.Empty;
       if (adetails.Cast != null)
       {
         foreach (Grabber.TMDBPerson apers in adetails.Cast)
@@ -93,17 +79,20 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
         }
       }
 
-      string sDirector = "";
-      string sWriters = "";
+      // TMDB Directors and Writers
+      string sDirector = string.Empty;
+      string sWriters = string.Empty;
       if (adetails.Crew != null)
       {
         foreach (Grabber.TMDBPerson apers in adetails.Crew)
         {
           if (!string.IsNullOrEmpty(apers.Name))
           {
-            if (apers.As.Contains("Direct"))
+            if (apers.As.Contains("Direct") && string.IsNullOrEmpty(sDirector))
             {
-              sDirector += (!string.IsNullOrEmpty(sDirector) ? " / " : string.Empty) + apers.Name; // + " (" + apers.As + ")";
+              // Only one Director per Movie in MP
+              // sDirector += (!string.IsNullOrEmpty(sDirector) ? " / " : string.Empty) + apers.Name; // + " (" + apers.As + ")";
+              sDirector = apers.Name; // + " (" + apers.As + ")";
             }
             else if (apers.As.Contains("Writ"))
             {
@@ -113,12 +102,13 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
         }
       }
 
+      // TMDB Fill movieDetails
       movieDetails.Title = adetails.Title;
       movieDetails.IMDBNumber = adetails.IMDBNumber;
       movieDetails.TMDBNumber = adetails.ID.ToString(); // MP1-4761
       movieDetails.Year = adetails.Year;
       movieDetails.Language = adetails.Language;
-      movieDetails.Plot = adetails.Plot.Replace("...", "").Trim();
+      movieDetails.Plot = adetails.Plot.Replace("...", string.Empty).Trim();
       movieDetails.Rating = adetails.Rating;
       movieDetails.RunTime = adetails.RunTime;
       movieDetails.TagLine = adetails.TagLine;
@@ -127,8 +117,8 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       movieDetails.Country = adetails.Country;
       movieDetails.Genre = adetails.Genre;
       movieDetails.Cast = sActors;
-      movieDetails.Director = sDirector.Replace("...", "").Trim();
-      movieDetails.WritingCredits = sWriters.Replace("...", "").Trim();
+      movieDetails.Director = sDirector.Replace("...", string.Empty).Trim();
+      movieDetails.WritingCredits = sWriters.Replace("...", string.Empty).Trim();
       movieDetails.MPARating = adetails.MPARating;
       movieDetails.Duration = movieDetails.RunTime;
       movieDetails.Votes = adetails.Votes.ToString();
@@ -140,20 +130,19 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       movieDetails.MPAAText = string.Empty;
       movieDetails.UserReview = string.Empty;
 
-      // IMDB
-      if (!string.IsNullOrEmpty(movieDetails.IMDBNumber))
-      {
-        movieDetails.MovieAwards = GetAwardsIMDB(movieDetails.IMDBNumber);
+      /* IMDB Test
+      movieDetails.UserReview = string.Empty;
+      movieDetails.MPARating = string.Empty;
+      movieDetails.Rating = 0.0f;
+      movieDetails.Votes = string.Empty;
+      movieDetails.RunTime = 0;
+      movieDetails.Language = string.Empty;
+      movieDetails.Studios = string.Empty;
+      movieDetails.TagLine = string.Empty;
+      */
 
-        // MPAA from IMDB
-        string pageURL = string.Format(IMDB_Parents, movieDetails.IMDBNumber);
-        string page = GetWebServerResponse(pageURL);
-        if (string.IsNullOrEmpty(movieDetails.MPARating) || movieDetails.MPARating == "NR")
-        {
-          movieDetails.MPARating = GetMPARating(page);
-        }
-        movieDetails.MPAAText = GetMPARatingText(page);
-      }
+      // IMDB Fill movieDetails
+      GetIMDBDetails(ref movieDetails);
 
       // Tagline
       if (API_LANG != "EN" && string.IsNullOrEmpty(movieDetails.TagLine))
@@ -177,6 +166,11 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       if (string.IsNullOrEmpty(movieDetails.TagLine))
       {
         movieDetails.TagLine = "-";
+      }
+
+      if (string.IsNullOrEmpty(movieDetails.MPARating))
+      {
+        movieDetails.MPARating = "NR";
       }
 
       // MP1-4761 - Collection cover and backdrop download 
@@ -214,33 +208,39 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     return API_LANG;
   }
 
-  #region<<TMDB_PARAMETERS>>
+  #region TMDB Title
 
-  public const bool API_ID_LOOKUP = true; // Try IMDB, TMDB LookUp by ID
-  public const string API_KEY = "e224fe4f3fec5f7b5570641f7cd3df3a"; //Inset API Key
+  public const string TITLE_MASK = "{0}{1}{2}";                    // {0} - Title {1} - Separator {2} - Original Title {3} - Year
+  public const string TITLE_SEPARATOR = " / ";
+
+  #endregion TMDB Title
+
+  #region GRABBER Parameters
+
+  public const bool GRABBER_ID_LOOKUP = true;                      // Try IMDB, TMDB LookUp by ID
+
+  public const bool GRABBER_ADDTOUSERGROUP = true;                 // Add movies to User groups
+  public const string GRABBER_OurGroup = "Наши фильмы";            // Groups for Our films
+  public const string GRABBER_ForeignGroup = "Иностранные фильмы"; // Groups for Foreign films
+
+  public const bool GRABBER_ADDTRIVIAASREVIEW = true;              // Add IMDB Trivia as UserReview, if Trivia empty -> IMDB UserReview
+
+  #endregion GRABBER Parameters
+
+  #region TMDB Parameters
+
+  public const string API_KEY = "e224fe4f3fec5f7b5570641f7cd3df3a"; // Inset API Key
   public static string API_LANG = CultureInfo.CurrentCulture.TwoLetterISOLanguageName.ToUpperInvariant();
   public static string API_LANG_URL = CultureInfo.CurrentCulture.TwoLetterISOLanguageName.ToLowerInvariant();
 
   private const string API_BaseUrl = "http://api.themoviedb.org/3/";
-  private const string API_PosterUrl = "http://image.tmdb.org/t/p/w780";
-  private const string API_FanartUrl = "http://image.tmdb.org/t/p/original";
+  private const string API_ImageUrl = "http://image.tmdb.org/t/p/";
+  private const string API_PosterUrl = API_ImageUrl + "w780";
+  private const string API_FanartUrl = API_ImageUrl + "original";
 
-  public const bool GRABBER_ADDTOUSERGROUP = true; // Try IMDB, TMDB LookUp by ID
-  public const string GRABBER_OurGroup = "Наши фильмы";  // Groups for Our films
-  public const string GRABBER_ForeignGroup = "Иностранные фильмы"; // Groups for Foreign films
+  #endregion TMDB Parameters
 
-  private const string IMDB_BaseUrl = "http://www.imdb.com/title/{0}/";
-
-  #endregion<<TMDB_PARAMETERS>>
-
-  #region<<TMDB_TITLE>>
-
-  public const string TITLE_MASK = "{0}{1}{2}"; // {0} - Title {1} - Separator {2} - Original Title {3} - Year
-  public const string TITLE_SEPARATOR = " / ";
-
-  #endregion<<TMDB_TITLE>>
-
-  #region<<TMDB_CONST>>
+  #region TMDB Const
 
   public const string API_Configuration = API_BaseUrl + "configuration";
   public const string API_SearchMovie = API_BaseUrl + "search/movie";
@@ -259,14 +259,25 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
   public const string API_Translations = API_BaseUrl + "movie/{0}/translations";
   public const string API_Collection = API_BaseUrl + "collection/{0}";
 
-  #endregion<<TMDB_CONST>>
+  #endregion TMDB Const
 
-  #region<<IMDB_CONST>>
+  #region IMDB Parameters
+
+  private const string IMDB_BaseUrl = "http://www.imdb.com/title/{0}/";
+
+  #endregion IMDB Parameters
+
+  #region IMDB Const
+
   public const string IMDB_Awards = IMDB_BaseUrl + "awards";
   public const string IMDB_Parents = IMDB_BaseUrl + "parentalguide";
-  #endregion<<IMDB_CONST>>
+  public const string IMDB_Trivia = IMDB_BaseUrl + "trivia";
+  public const string IMDB_Review = IMDB_BaseUrl + "reviews";
+  public const string IMDB_Ratings = IMDB_BaseUrl + "ratings";
 
-  #region <<TMDB METHODS>>
+  #endregion IMDB Const
+
+  #region TMDB Methods
 
   public static TMDBUrl[] GetTitles(string title)
   {
@@ -277,7 +288,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     string imdbMovieID = string.Empty;
     string tmdbMovieID = string.Empty;
 
-    if (API_ID_LOOKUP)
+    if (GRABBER_ID_LOOKUP)
     {
       // Get IMDB ID from search string
       Regex rximdbid = new Regex(@"(?:\s|\+|^)(?<imdbid>tt\d{7})\b");
@@ -355,11 +366,11 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
             {
               if (tmdbMovie.title.Equals(tmdbMovie.original_title, StringComparison.CurrentCultureIgnoreCase))
               {
-                sTitle = sTitle.Replace("{1}", "").Replace("{2}", "").Trim();
+                sTitle = sTitle.Replace("{1}", string.Empty).Replace("{2}", string.Empty).Trim();
               }
               if (string.IsNullOrEmpty(tmdbMovie.title) || string.IsNullOrEmpty(tmdbMovie.original_title))
               {
-                sTitle = sTitle.Replace("{1}", "").Trim();
+                sTitle = sTitle.Replace("{1}", string.Empty).Trim();
               }
               sTitle = string.Format(sTitle, tmdbMovie.title, TITLE_SEPARATOR, tmdbMovie.original_title, sYear);
               if (!string.IsNullOrEmpty(sTitle))
@@ -419,7 +430,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
 
     try
     {
-      string sRequest = url;
+      string sRequest = GetTMDBMovieDetailsURL(url);
       if (!url.Contains(API_KEY))
       {
         sRequest = GetTMDBMovieDetailsURL(url);
@@ -435,7 +446,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       return oReturn;
     }
 
-    // Log.Debug("{0} GetTMDBDetails url = {1}, sReponseDetails = {2}", strGrabber, HideAPIKey(url), json);
+    // Log.Debug("{0} GetTMDBDetails url = {1}, sResponseDetails = {2}", strGrabber, HideAPIKey(url), json);
     try
     {
       MovieDatails Movie = JsonConvert.DeserializeObject<MovieDatails>(json);
@@ -575,11 +586,11 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       {
         if (oReturn.Title.Equals(oReturn.OriginalTitle, StringComparison.CurrentCultureIgnoreCase))
         {
-          ResultTitleMask = ResultTitleMask.Replace("{1}", "").Replace("{2}", "").Trim();
+          ResultTitleMask = ResultTitleMask.Replace("{1}", string.Empty).Replace("{2}", string.Empty).Trim();
         }
         if (string.IsNullOrEmpty(oReturn.Title) || string.IsNullOrEmpty(oReturn.OriginalTitle))
         {
-          ResultTitleMask = ResultTitleMask.Replace("{1}", "").Trim();
+          ResultTitleMask = ResultTitleMask.Replace("{1}", string.Empty).Trim();
         }
 
         oReturn.Title = string.Format(ResultTitleMask, oReturn.Title, TITLE_SEPARATOR, oReturn.OriginalTitle);
@@ -650,13 +661,6 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       movie.MPARating = sCertification;
     }
     catch { }
-    finally
-    {
-      if (string.IsNullOrEmpty(movie.MPARating))
-      {
-        movie.MPARating = "NR";
-      }
-    }
   }
 
   private static string GetMPAA(List<Country> countrys, string code)
@@ -692,7 +696,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
 
     Log.Debug("{0} Get Cast for {1}: {2}", strGrabber, movie.ID, movie.Title);
 
-    string json = "";
+    string json = string.Empty;
     try
     {
       string sRequest = MakeTMDBUrl(API_Casts, movie.ID.ToString());
@@ -798,44 +802,6 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     catch { }
   }
 
-  private static string GetWebServerResponse(string srequest)
-  {
-    Log.Debug("{0} GetWebServerResponse: {1}", strGrabber, HideAPIKey(srequest));
-    string sReturn = string.Empty;
-    System.Net.HttpWebRequest oHttpWebRequest;
-    try
-    {
-      oHttpWebRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(srequest);
-      oHttpWebRequest.Timeout = 5000;
-      oHttpWebRequest.Method = System.Net.WebRequestMethods.Http.Get;
-      if (srequest.IndexOf(".imdb.") > 0)
-      {
-        string uu = "BCYmcFe4PTBQ8nEoIcCgT5AJwPk7BAOCg5XsQrvqKyvxEUpEB6KqjE0Uv_pqnPChVCCnD8vgTK3UtK7FGCdw39E2j-Fb5MWegRLgbNA2rFWeYUJbbXhRyUaxqGuuW3AZb1grBhmGMxhDJyH5ntFDj1X1Ejh_jqR6BaQUk6P16AN1EMPstTSBIqxVW08QEqMKQgsK75y8_s1Ss9tyDfZpLZzCWhO5qftGUn3_bbw_DBF6sTZDo6xK-zy88VZ8cws-D30P";
-        string id = "BCYobsJMWRwG55i2yGvVuZe7v5twryi7KSxLglDHw2wVcI1rMq0OjHVT7duPo5NNHKDDVFBTVjJM4PoMonlTB_q9NvMCs-wB78Y1hGjdgCLX0SEEC2Y6BD4E3Z6cIoMwlhTDFSprYlxMqjEsFGYwWzVp1oIUYkZQ0kgpX_MvBrEh-fU";
-        string cookieHeader = string.Format("uu={0}; id={1}", uu, id);
-        oHttpWebRequest.Headers.Add("Cookie", cookieHeader);
-        oHttpWebRequest.Headers.Add("Accept-Language", "en-US,en;q=0.5");
-      }
-      else
-      {
-        oHttpWebRequest.Accept = "application/json";
-      }
-      System.Net.HttpWebResponse oResponse = (System.Net.HttpWebResponse)oHttpWebRequest.GetResponse();
-
-      using (System.IO.StreamReader sr = new System.IO.StreamReader(oResponse.GetResponseStream()))
-      {
-        sReturn = sr.ReadToEnd();
-      }
-      oResponse.Close();
-    }
-    catch { }
-    finally
-    {
-      oHttpWebRequest = null;
-    }
-    return sReturn;
-  }
-
   private static string HideAPIKey(string url)
   {
     return url.Replace(API_KEY, "<APIKEY>");
@@ -863,9 +829,78 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     }
     return sURL;
   }
-  #endregion <<TMDB METHODS>>
+  #endregion TMDB Methods
 
-  #region <<IMDB METHODS>>
+  #region IMDB Methods
+
+  public static void GetIMDBDetails(ref IMDBMovie movieDetails)
+  {
+    if (string.IsNullOrEmpty(movieDetails.IMDBNumber))
+    {
+      return;
+    }
+    // IMDB Fill movieDetails
+
+    // IMDB Trivia / Review 
+    if (string.IsNullOrEmpty(movieDetails.UserReview))
+    {
+      if (GRABBER_ADDTRIVIAASREVIEW)
+      {
+        movieDetails.UserReview = GetTriviaIMDB(movieDetails.IMDBNumber);
+      }
+      if (string.IsNullOrEmpty(movieDetails.UserReview))
+      {
+        movieDetails.UserReview = GetUserReviewIMDB(movieDetails.IMDBNumber);
+      }
+    }
+
+    // Awards
+    if (string.IsNullOrEmpty(movieDetails.MovieAwards))
+    {
+      movieDetails.MovieAwards = GetAwardsIMDB(movieDetails.IMDBNumber);
+    }
+
+    // IMDB MPAA Rating / Text
+    string pageURL = string.Format(IMDB_Parents, movieDetails.IMDBNumber);
+    string page = GetWebServerResponse(pageURL);
+    if (string.IsNullOrEmpty(movieDetails.MPARating))
+    {
+      movieDetails.MPARating = GetMPARating(page);
+    }
+    movieDetails.MPAAText = GetMPARatingText(page);
+
+    // IMDB Rating / Votes 
+    if (movieDetails.Rating == 0.0f || string.IsNullOrEmpty(movieDetails.Votes))
+    {
+      pageURL = string.Format(IMDB_Ratings, movieDetails.IMDBNumber);
+      page = GetWebServerResponse(pageURL);
+      movieDetails.Rating = GetRatingIMDB(page);
+      movieDetails.Votes = GetVotesIMDB(page);
+    }
+
+    // IMDB RunTime / Languages / Studios / TagLine
+    if (movieDetails.RunTime == 0 || string.IsNullOrEmpty(movieDetails.Language) || string.IsNullOrEmpty(movieDetails.Studios) || string.IsNullOrEmpty(movieDetails.TagLine))
+    {
+      pageURL = string.Format(IMDB_BaseUrl, movieDetails.IMDBNumber);
+      page = GetWebServerResponse(pageURL);
+      if (string.IsNullOrEmpty(movieDetails.Language))
+      {
+        movieDetails.Language = GetLanguagesIMDB(page);
+      }
+      if (string.IsNullOrEmpty(movieDetails.Studios))
+      {
+        movieDetails.Studios = GetStudiosIMDB(page);
+      }
+      if (string.IsNullOrEmpty(movieDetails.TagLine))
+      {
+        movieDetails.TagLine = GetTagLineIMDB(page);
+      }
+      if (movieDetails.RunTime == 0)
+      {
+        movieDetails.RunTime = GetRuntimeIMDB(page);
+      }
+    }
+  }
 
   private static string GetAwardsIMDB(string IMDBID)
   {
@@ -881,143 +916,140 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
 
       string _awardsList = string.Empty;
 
-      if (!string.IsNullOrEmpty(_awardsPage))
+      string rx_awards_mainblock = @"<h3>(?<award>[^<]+?)<a href=..event[^>]+?class=.event_year[^>]+?>(?<awardyear>[^<]+?)<(?<block>[\s\S]+?)<\/table>";
+      string rx_awards_listWblock = @"<tr>[\s\S]+?>^(?!Nomin(?:ated|ee))|(W(?:on|inner))<\/b(?<block>[\s\S]+?)<\/tr";
+      string rx_awards_listNblock = @"<tr>[\s\S]+?>^(?!W(?:on|inner))|(Nomin(?:ated|ee))<\/b(?<block>[\s\S]+?)<\/tr";
+      string rx_awards_line = @"award_category.>(?<award>[^<]+?)<[\s\S]+?award_description.>(?<what>[^<]+?)(?:<br.?\/>)?(?<who><[\s\S]+?)<\/td>";
+      _awardsPage = HttpUtility.HtmlDecode(_awardsPage);
+
+      ArrayList awardsList = Parse(_awardsPage, rx_awards_mainblock);
+      if (awardsList != null && awardsList.Count > 0)
       {
-        string rx_awards_mainblock = @"<h3>(?<award>[^<]+?)<a href=..event[^>]+?class=.event_year[^>]+?>(?<awardyear>[^<]+?)<(?<block>[\s\S]+?)<\/table>";
-        string rx_awards_listWblock = @"<tr>[\s\S]+?>^(?!Nominated)|(Won)<\/b(?<block>[\s\S]+?)<\/tr";
-        string rx_awards_listNblock = @"<tr>[\s\S]+?>^(?!Won)|(Nominated)<\/b(?<block>[\s\S]+?)<\/tr";
-        string rx_awards_line = @"award_category.>(?<award>[^<]+?)<[\s\S]+?award_description.>(?<what>[^<]+?)(?:<br.?\/>)?(?<who><[\s\S]+?)<\/td>";
-        _awardsPage = HttpUtility.HtmlDecode(_awardsPage);
-
-        ArrayList awardsList = Parse(_awardsPage, rx_awards_mainblock);
-        if (awardsList != null && awardsList.Count > 0)
+        for (int i = 0; i < awardsList.Count; i++)
         {
-          for (int i = 0; i < awardsList.Count; i++)
-          {
-            Hashtable awardMain = (Hashtable)awardsList[i];
-            string awardMainName = (string)awardMain["award"] + " " + (string)awardMain["awardyear"];
-            string awardMainBlock = (string)awardMain["block"];
-            awardMainName = awardMainName.Trim().Replace("\n", "");
-            awardMainName = Utils.stripHTMLtags(awardMainName);
+          Hashtable awardMain = (Hashtable)awardsList[i];
+          string awardMainName = (string)awardMain["award"] + " " + (string)awardMain["awardyear"];
+          string awardMainBlock = (string)awardMain["block"];
+          awardMainName = awardMainName.Trim().Replace("\n", string.Empty);
+          awardMainName = Utils.stripHTMLtags(awardMainName);
 
-            if (!string.IsNullOrEmpty(awardMainBlock))
+          if (!string.IsNullOrEmpty(awardMainBlock))
+          {
+            _awardsList = _awardsList + "* " + awardMainName + "\n";
+            // Winner
+            ArrayList awardsWList = Parse(awardMainBlock, rx_awards_listWblock);
+            if (awardsWList != null && awardsWList.Count > 0)
             {
-              _awardsList = _awardsList + "* " + awardMainName + "\n";
-              // Winner
-              ArrayList awardsWList = Parse(awardMainBlock, rx_awards_listWblock);
-              if (awardsWList != null && awardsWList.Count > 0)
+              for (int k = 0; k < awardsWList.Count; k++)
               {
-                for (int k = 0; k < awardsWList.Count; k++)
+                Hashtable awardWMain = (Hashtable)awardsWList[k];
+                string awardWMainBlock = (string)awardWMain["block"];
+                if (!string.IsNullOrEmpty(awardWMainBlock))
                 {
-                  Hashtable awardWMain = (Hashtable)awardsWList[k];
-                  string awardWMainBlock = (string)awardWMain["block"];
-                  if (!string.IsNullOrEmpty(awardWMainBlock))
+                  _awardsList = _awardsList + "Won:\n";
+                  ArrayList awardsWListLines = Parse(awardWMainBlock, rx_awards_line);
+                  if (awardsWListLines != null && awardsWListLines.Count > 0)
                   {
-                    _awardsList = _awardsList + "Won:\n";
-                    ArrayList awardsWListLines = Parse(awardWMainBlock, rx_awards_line);
-                    if (awardsWListLines != null && awardsWListLines.Count > 0)
+                    for (int j = 0; j < awardsWListLines.Count; j++)
                     {
-                      for (int j = 0; j < awardsWListLines.Count; j++)
+                      Hashtable awardLine = (Hashtable)awardsWListLines[j];
+                      string awardLineName = (string)awardLine["award"];
+                      string awardLineWho = (string)awardLine["who"];
+                      string awardLineWhat = (string)awardLine["what"];
+                      if (!string.IsNullOrEmpty(awardLineName))
                       {
-                        Hashtable awardLine = (Hashtable)awardsWListLines[j];
-                        string awardLineName = (string)awardLine["award"];
-                        string awardLineWho = (string)awardLine["who"];
-                        string awardLineWhat = (string)awardLine["what"];
-                        if (!string.IsNullOrEmpty(awardLineName))
-                        {
-                          awardLineName = awardLineName.Trim().Replace("\n", "");
-                          awardLineName = Utils.stripHTMLtags(awardLineName);
-                          awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineName = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineWho))
-                        {
-                          awardLineWho = awardLineWho.Trim().Replace("\n", "").Replace("</a>", ", ");
-                          awardLineWho = Utils.stripHTMLtags(awardLineWho);
-                          awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineWho = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineWhat))
-                        {
-                          awardLineWhat = awardLineWhat.Trim().Replace("\n", "");
-                          awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
-                          awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineWhat = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineName))
-                        {
-                          _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? "" : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? "" : " - " + awardLineWhat) + "\n";
-                          Log.Debug("{4} Award (W): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat, strGrabber);
-                        }
+                        awardLineName = awardLineName.Trim().Replace("\n", string.Empty);
+                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineName = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWho))
+                      {
+                        awardLineWho = awardLineWho.Trim().Replace("\n", string.Empty).Replace("</a>", ", ");
+                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWho = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWhat))
+                      {
+                        awardLineWhat = awardLineWhat.Trim().Replace("\n", string.Empty);
+                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWhat = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? string.Empty : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? string.Empty : " - " + awardLineWhat) + "\n";
+                        Log.Debug("{4} Award (W): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat, strGrabber);
                       }
                     }
                   }
                 }
               }
-              // Nominate
-              ArrayList awardsNList = Parse(awardMainBlock, rx_awards_listNblock);
-              if (awardsNList != null && awardsNList.Count > 0)
+            }
+            // Nominate
+            ArrayList awardsNList = Parse(awardMainBlock, rx_awards_listNblock);
+            if (awardsNList != null && awardsNList.Count > 0)
+            {
+              for (int k = 0; k < awardsNList.Count; k++)
               {
-                for (int k = 0; k < awardsNList.Count; k++)
+                Hashtable awardNMain = (Hashtable)awardsNList[k];
+                string awardNMainBlock = (string)awardNMain["block"];
+                if (!string.IsNullOrEmpty(awardNMainBlock))
                 {
-                  Hashtable awardNMain = (Hashtable)awardsNList[k];
-                  string awardNMainBlock = (string)awardNMain["block"];
-                  if (!string.IsNullOrEmpty(awardNMainBlock))
+                  _awardsList = _awardsList + "Nominated:\n";
+                  ArrayList awardsNListLines = Parse(awardNMainBlock, rx_awards_line);
+                  if (awardsNListLines != null && awardsNListLines.Count > 0)
                   {
-                    _awardsList = _awardsList + "Nominated:\n";
-                    ArrayList awardsNListLines = Parse(awardNMainBlock, rx_awards_line);
-                    if (awardsNListLines != null && awardsNListLines.Count > 0)
+                    for (int j = 0; j < awardsNListLines.Count; j++)
                     {
-                      for (int j = 0; j < awardsNListLines.Count; j++)
+                      Hashtable awardLine = (Hashtable)awardsNListLines[j];
+                      string awardLineName = (string)awardLine["award"];
+                      string awardLineWho = (string)awardLine["who"];
+                      string awardLineWhat = (string)awardLine["what"];
+                      if (!string.IsNullOrEmpty(awardLineName))
                       {
-                        Hashtable awardLine = (Hashtable)awardsNListLines[j];
-                        string awardLineName = (string)awardLine["award"];
-                        string awardLineWho = (string)awardLine["who"];
-                        string awardLineWhat = (string)awardLine["what"];
-                        if (!string.IsNullOrEmpty(awardLineName))
-                        {
-                          awardLineName = awardLineName.Trim().Replace("\n", "");
-                          awardLineName = Utils.stripHTMLtags(awardLineName);
-                          awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineName = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineWho))
-                        {
-                          awardLineWho = awardLineWho.Trim().Replace("\n", "").Replace("</a>", ", ");
-                          awardLineWho = Utils.stripHTMLtags(awardLineWho);
-                          awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineWho = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineWhat))
-                        {
-                          awardLineWhat = awardLineWhat.Trim().Replace("\n", "");
-                          awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
-                          awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
-                        }
-                        else
-                        {
-                          awardLineWhat = string.Empty;
-                        }
-                        if (!string.IsNullOrEmpty(awardLineName))
-                        {
-                          _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? "" : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? "" : " - " + awardLineWhat) + "\n";
-                          Log.Debug("{4} Award (N): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat, strGrabber);
-                        }
+                        awardLineName = awardLineName.Trim().Replace("\n", string.Empty);
+                        awardLineName = Utils.stripHTMLtags(awardLineName);
+                        awardLineName = Regex.Replace(awardLineName, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineName = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWho))
+                      {
+                        awardLineWho = awardLineWho.Trim().Replace("\n", string.Empty).Replace("</a>", ", ");
+                        awardLineWho = Utils.stripHTMLtags(awardLineWho);
+                        awardLineWho = Regex.Replace(awardLineWho, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWho = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineWhat))
+                      {
+                        awardLineWhat = awardLineWhat.Trim().Replace("\n", string.Empty);
+                        awardLineWhat = Utils.stripHTMLtags(awardLineWhat);
+                        awardLineWhat = Regex.Replace(awardLineWhat, @"[ ]{2,}", " ").Trim();
+                      }
+                      else
+                      {
+                        awardLineWhat = string.Empty;
+                      }
+                      if (!string.IsNullOrEmpty(awardLineName))
+                      {
+                        _awardsList = _awardsList + "- " + awardLineName + (string.IsNullOrEmpty(awardLineWho) ? string.Empty : " - " + awardLineWho) + (string.IsNullOrEmpty(awardLineWhat) ? string.Empty : " - " + awardLineWhat) + "\n";
+                        Log.Debug("{4} Award (N): {0} - {1} {2} {3}", awardMainName, awardLineName, awardLineWho, awardLineWhat, strGrabber);
                       }
                     }
                   }
@@ -1027,14 +1059,128 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
           }
         }
       }
+      
       if (!string.IsNullOrEmpty(_awardsList))
       {
-        return _awardsList; // MP1-4846
+        return "Awards:\n" + _awardsList; // MP1-4846
       }
     }
     catch (Exception ex)
     {
       Log.Error("{0} IMDB Script GetAwards error: {1}", strGrabber, ex.Message);
+    }
+    return string.Empty;
+  }
+
+  private static string GetTriviaIMDB(string IMDBID)
+  {
+    try
+    {
+      string _triviaURL = string.Format(IMDB_Trivia, IMDBID);
+      string _triviaPage = GetWebServerResponse(_triviaURL);
+      if (string.IsNullOrEmpty(_triviaPage))
+      {
+        return string.Empty;
+      }
+
+      string _triviaList = string.Empty;
+
+      _triviaPage = HttpUtility.HtmlDecode(_triviaPage);
+
+      string rx_trivia_line = @"<div class=.sodatext.>(?<trivia>[\s\S]+?)<\/div>";
+      ArrayList triviaList = Parse(_triviaPage, rx_trivia_line);
+      if (triviaList != null && triviaList.Count > 0)
+      {
+        for (int i = 0; i < triviaList.Count; i++)
+        {
+          Hashtable triviaMain = (Hashtable)triviaList[i];
+          string triviaLine = (string)triviaMain["trivia"];
+          if (!string.IsNullOrEmpty(triviaLine))
+          {
+            triviaLine = triviaLine.Trim().Replace("\n", string.Empty);
+            triviaLine = Utils.stripHTMLtags(triviaLine);
+            triviaLine = Regex.Replace(triviaLine, @"[ ]{2,}", " ").Trim();
+            _triviaList = _triviaList + "* " + triviaLine + "\n";
+          }
+        }
+      }
+
+      if (!string.IsNullOrEmpty(_triviaList))
+      {
+        return _triviaList;
+      }
+    }
+    catch (Exception ex)
+    {
+      Log.Error("{0} IMDB Script GetTrivia error: {1}", strGrabber, ex.Message);
+    }
+    return string.Empty;
+  }
+
+  private static string GetUserReviewIMDB(string IMDBID)
+  {
+    try
+    {
+      string _reviewURL = string.Format(IMDB_Review, IMDBID);
+      string _reviewPage = GetWebServerResponse(_reviewURL);
+      if (string.IsNullOrEmpty(_reviewPage))
+      {
+        return string.Empty;
+      }
+
+      string _reviewList = string.Empty;
+
+      _reviewPage = HttpUtility.HtmlDecode(_reviewPage);
+
+      string rx_review_line = @"<span>(?<rating>\d{1,2})<\/span>[^\/]+?\/(?<maxrating>\d{1,2})<\/span>[\s\S]+?<div[^>]+?title.>(?<title>[^<]+?)<\/div>[\s\S]+?<div[^>]+?text.>(?<review>[\s\S]+?)<\/div>";
+      ArrayList reviewList = Parse(_reviewPage, rx_review_line);
+      if (reviewList != null && reviewList.Count > 0)
+      {
+        for (int i = 0; i < reviewList.Count; i++)
+        {
+          Hashtable reviewMain = (Hashtable)reviewList[i];
+          string reviewRating = (string)reviewMain["rating"];
+          string reviewMaxRating = (string)reviewMain["maxrating"];
+          string reviewTitle = (string)reviewMain["title"];
+          string reviewText = (string)reviewMain["review"];
+          string reviewLine = string.Empty;
+
+          if (!string.IsNullOrEmpty(reviewTitle))
+          {
+            reviewTitle = reviewTitle.Trim().Replace("\n", string.Empty);
+            reviewTitle = Utils.stripHTMLtags(reviewTitle);
+            reviewTitle = Regex.Replace(reviewTitle, @"[ ]{2,}", " ").Trim();
+          }
+          if (!string.IsNullOrEmpty(reviewText))
+          {
+            reviewText = reviewText.Trim().Replace("\n", string.Empty);
+            reviewText = Utils.stripHTMLtags(reviewText);
+            reviewText = Regex.Replace(reviewText, @"[ ]{2,}", " ").Trim();
+          }
+          if (!string.IsNullOrEmpty(reviewText))
+          {
+            if (!string.IsNullOrEmpty(reviewRating))
+            {
+              reviewLine = "[" + reviewRating + (!string.IsNullOrEmpty(reviewMaxRating) ? "/" + reviewMaxRating : string.Empty) + "]";
+            }
+            if (!string.IsNullOrEmpty(reviewTitle))
+            {
+              reviewLine = reviewLine + " " + reviewTitle + "\n";
+            }
+            reviewLine = reviewLine + reviewText;
+            _reviewList = _reviewList + reviewLine + "\n";
+          }
+        }
+      }
+
+      if (!string.IsNullOrEmpty(_reviewList))
+      {
+        return _reviewList;
+      }
+    }
+    catch (Exception ex)
+    {
+      Log.Error("{0} IMDB Script GetUserReview error: {1}", strGrabber, ex.Message);
     }
     return string.Empty;
   }
@@ -1083,12 +1229,6 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
         }
       }
     }
-
-    if (string.IsNullOrEmpty(mpaaRating))
-    {
-      mpaaRating = "NR";
-    }
-
     return mpaaRating;
   }
 
@@ -1137,7 +1277,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
               string mpaaLineText = (string)mpaaLine["text"];
               if (!string.IsNullOrEmpty(mpaaLineText) && !Regex.IsMatch(mpaaLineText, @"\d+?\/\d+?"))
               {
-                mpaaLineText = mpaaLineText.Trim().Replace("\n", "");
+                mpaaLineText = mpaaLineText.Trim().Replace("\n", string.Empty);
                 mpaaLineText = Utils.stripHTMLtags(mpaaLineText);
                 mpaaLineText = mpaaLineText.Trim();
                 MPAADesc = MPAADesc + mpaaLineText + "\n";
@@ -1157,6 +1297,165 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     }
 
     return mpaaText;
+  }
+
+  private static float GetRatingIMDB(string page)
+  {
+    string rx_rating = @"vote of.+?(?<rating>\d+?[.,]?\d*?)\s?\/";
+    return ParseSingleFloatValue(page, rx_rating, "rating");
+  }
+
+  private static string GetVotesIMDB(string page)
+  {
+    string rx_votes = @"(?<votes>\d{1,}[.,]?(?:\d{1,})?)[\s\S]*?IMDb users";
+    string votes = ParseSingleIntValue(page, rx_votes, "votes").ToString();
+    return votes.Trim();
+  }
+
+  private static string GetLanguagesIMDB(string page)
+  {
+    if (string.IsNullOrEmpty(page))
+    {
+      return string.Empty;
+    }
+    string _languages = string.Empty;
+
+    string rx_block = @"<h4\sclass=.inline.>Language:<\/h4>.*?<\/div>";
+    string rx_line = @"href=.[^>]+?language[^>]+?>(?<language>[^<]+)<\/a>";
+    string block = Regex.Match(page, rx_block, RegexOptions.Singleline).Value;
+
+    ArrayList languageList = Parse(block, rx_line);
+    if (languageList != null && languageList.Count > 0)
+    {
+      for (int i = 0; i < languageList.Count; i++)
+      {
+        Hashtable languageMain = (Hashtable)languageList[i];
+        string language = (string)languageMain["language"];
+        if (!string.IsNullOrEmpty(language))
+        {
+          language = language.Trim().Replace("\n", string.Empty);
+          language = Utils.stripHTMLtags(language);
+          language = HttpUtility.HtmlDecode(language);
+          language = Regex.Replace(language, @"[ ]{2,}", " ").Replace(", ", " ").Trim();
+          _languages = _languages + (string.IsNullOrEmpty(_languages) ? string.Empty : ", ") + language;
+        }
+      }
+    }
+
+    if (!string.IsNullOrEmpty(_languages))
+    {
+      Log.Debug("{0} IMDB Languages: {1}", strGrabber, _languages);
+    }
+
+    return _languages;
+  }
+
+  private static string GetStudiosIMDB(string page)
+  {
+    if (string.IsNullOrEmpty(page))
+    {
+      return string.Empty;
+    }
+    string _studios = string.Empty;
+
+    string rx_block = @"<h4\sclass=.inline.>Production\sCo:<\/h4>.*?href=.companycredits";
+    string rx_line = @"href=.[^>]+?company[^>]+?>(?:<span[^>]+?>)?(?<movieStudios>[^<]+?)<";
+    string block = Regex.Match(page, rx_block, RegexOptions.Singleline).Value;
+
+    ArrayList studioList = Parse(block, rx_line);
+    if (studioList != null && studioList.Count > 0)
+    {
+      for (int i = 0; i < studioList.Count; i++)
+      {
+        Hashtable studioMain = (Hashtable)studioList[i];
+        string studio = (string)studioMain["movieStudios"];
+        if (!string.IsNullOrEmpty(studio))
+        {
+          studio = studio.Trim().Replace("\n", string.Empty);
+          studio = Utils.stripHTMLtags(studio);
+          studio = HttpUtility.HtmlDecode(studio);
+          studio = Regex.Replace(studio, @"[ ]{2,}", " ").Replace(", ", " ").Trim();
+          _studios = _studios + (string.IsNullOrEmpty(_studios) ? string.Empty : " / ") + studio;
+        }
+      }
+    }
+
+    if (!string.IsNullOrEmpty(_studios))
+    {
+      Log.Debug("{0} IMDB Studios: {1}", strGrabber, _studios);
+    }
+
+    return _studios;
+  }
+
+  private static string GetTagLineIMDB(string page)
+  {
+    string rx_line = @"Taglines:<\/h4>(?<tagline>[^<]+?)<";
+    string _tagline = ParseSingleValue(page, rx_line, "tagline", true);
+
+    if (!string.IsNullOrEmpty(_tagline))
+    {
+      _tagline = _tagline.Trim().Replace("\n", string.Empty);
+      Log.Debug("{0} IMDB Tagline: {1}", strGrabber, _tagline);
+    }
+    return _tagline;
+  }
+
+  private static int GetRuntimeIMDB(string page)
+  {
+    string rx_pattern = @"<time itemprop=.duration[^>]*?>\n?.*?(?<runtime>\d+)\s*min\n?<\/time>";
+    return ParseSingleIntValue(page, rx_pattern, "runtime");
+  }
+
+  #endregion IMDB Methods
+
+  #region Regex Parsers
+
+  private static string ParseSingleValue(string input, string pattern, string name, bool htmlDecode) 
+  {
+    string result = string.Empty;
+      
+    ArrayList values = Parse(input, pattern);
+    if (values.Count > 0) 
+    {
+      result = (string)((Hashtable)values[0])[name];
+    }
+    result = htmlDecode ? HttpUtility.HtmlDecode(result) : result;
+    return string.IsNullOrEmpty(result) ? string.Empty : result.Trim();
+  }
+
+  private static int ParseSingleIntValue(string input, string pattern, string name) 
+  {
+    int intValue = 0;
+    string value = ParseSingleValue(input, pattern, name, true);
+
+    if (!string.IsNullOrEmpty(value)) 
+    {
+      value = value.Replace(".", string.Empty);
+      value = value.Replace(",", string.Empty);
+      if (value.StartsWith("0x") || value.StartsWith("x")) 
+      {
+        int.TryParse(Regex.Replace(value, @"0?x", string.Empty), NumberStyles.HexNumber, CultureInfo.InvariantCulture, out intValue);
+      } 
+      else 
+      {
+        int.TryParse(value, out intValue);
+      }
+    }
+    return intValue;
+  }
+
+  private static float ParseSingleFloatValue(string input, string pattern, string name) 
+  {
+    float floatValue = 0.0F;
+    string value = ParseSingleValue(input, pattern, name, true);
+    if (!string.IsNullOrEmpty(value)) 
+    {
+      value = value.Replace(".", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
+      value = value.Replace(",", CultureInfo.CurrentCulture.NumberFormat.NumberDecimalSeparator);
+      float.TryParse(value, out floatValue);
+    }
+    return floatValue;
   }
 
   private static ArrayList Parse(string input, string pattern)
@@ -1190,13 +1489,54 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     return keyedMatches;
   }
 
-  #endregion <<IMDB METHODS>>
+  #endregion
 
-  #region<<TMDB STRUCT>>
+  #region Web
+
+  private static string GetWebServerResponse(string srequest)
+  {
+    Log.Debug("{0} GetWebServerResponse: {1}", strGrabber, HideAPIKey(srequest));
+    string sReturn = string.Empty;
+    System.Net.HttpWebRequest oHttpWebRequest;
+    try
+    {
+      oHttpWebRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(srequest);
+      oHttpWebRequest.Timeout = 5000;
+      oHttpWebRequest.Method = System.Net.WebRequestMethods.Http.Get;
+      if (srequest.IndexOf(".imdb.") > 0)
+      {
+        string uu = "BCYmcFe4PTBQ8nEoIcCgT5AJwPk7BAOCg5XsQrvqKyvxEUpEB6KqjE0Uv_pqnPChVCCnD8vgTK3UtK7FGCdw39E2j-Fb5MWegRLgbNA2rFWeYUJbbXhRyUaxqGuuW3AZb1grBhmGMxhDJyH5ntFDj1X1Ejh_jqR6BaQUk6P16AN1EMPstTSBIqxVW08QEqMKQgsK75y8_s1Ss9tyDfZpLZzCWhO5qftGUn3_bbw_DBF6sTZDo6xK-zy88VZ8cws-D30P";
+        string id = "BCYobsJMWRwG55i2yGvVuZe7v5twryi7KSxLglDHw2wVcI1rMq0OjHVT7duPo5NNHKDDVFBTVjJM4PoMonlTB_q9NvMCs-wB78Y1hGjdgCLX0SEEC2Y6BD4E3Z6cIoMwlhTDFSprYlxMqjEsFGYwWzVp1oIUYkZQ0kgpX_MvBrEh-fU";
+        string cookieHeader = string.Format("uu={0}; id={1}", uu, id);
+        oHttpWebRequest.Headers.Add("Cookie", cookieHeader);
+        oHttpWebRequest.Headers.Add("Accept-Language", "en-US,en;q=0.5");
+      }
+      else
+      {
+        oHttpWebRequest.Accept = "application/json";
+      }
+      System.Net.HttpWebResponse oResponse = (System.Net.HttpWebResponse)oHttpWebRequest.GetResponse();
+
+      using (System.IO.StreamReader sr = new System.IO.StreamReader(oResponse.GetResponseStream()))
+      {
+        sReturn = sr.ReadToEnd();
+      }
+      oResponse.Close();
+    }
+    catch { }
+    finally
+    {
+      oHttpWebRequest = null;
+    }
+    return sReturn;
+  }
+
+  #endregion Web
+
+  #region TMDB Struct
 
   public struct TMDBUrl
   {
-
     public TMDBUrl(string url, string title, string grabber)
     {
       this.url = url;
@@ -1207,17 +1547,17 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     public string url;
     public string title;
     public string grabber;
-  } //EOC
+  } // EOC
 
   public struct TMDBMovie
   {
     /// <summary>
-    ///  TITRE
+    ///  TITLE
     /// </summary>
     public string Title;
 
     /// <summary>
-    ///  ORIGINAL TITRE
+    ///  ORIGINAL TITLE
     /// </summary>
     public string OriginalTitle;
 
@@ -1229,11 +1569,11 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     public string IMDBNumber;
 
     /// <summary>
-    /// Production Year (Annee de production)
+    /// Production Year
     /// </summary>
     public int Year;
 
-    // DUREE
+    // Runtime
     public int RunTime;
 
     // Get covers
@@ -1251,16 +1591,16 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     // Studios
     public string Studios;
 
-    //Country
+    // Country
     public string Country;
 
-    //Language
+    // Language
     public string Language;
 
-    //MpaRating NR
+    // MPAARating NR
     public string MPARating;
 
-    //Tagline
+    // Tagline
     public string TagLine;
 
     // Collection
@@ -1271,14 +1611,15 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     // User groups
     public string UserGroups;
 
-    // SYNOPSIS COURT
+    // Plot / Plot Outline
     public string Plot;
     public string PlotOutline;
 
+    // Fnart
     public string FanartURL;
 
+    // Rating / Votes
     public float Rating;
-
     public int Votes;
 
     /// <summary>
@@ -1286,20 +1627,23 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     /// </summary>
     public TMDBPerson[] Cast;
 
+    /// <summary>
+    /// Crews
+    /// </summary>
     public TMDBPerson[] Crew;
 
-  } //EOC
+  } // EOC
 
   public struct TMDBPerson
   {
     public string Id;
     public string Name;
     public string As;
-  } //EOC
+  } // EOC
 
-  #endregion<<TMDB STRUCT>>
+  #endregion TMDB Struct
 
-  #region TMDB API STRUCT
+  #region TMDB API Struct
 
   public class SearchResult
   {
@@ -1434,7 +1778,9 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     public string profile_path { get; set; }
   }
 
-  #endregion
+  #endregion TMDB API Struct
+
+  #region Encoder
 
   public static class Encoder
   {
@@ -1451,6 +1797,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
       return (match.Value == " ") ? "+" : String.Format("&{0};", Convert.ToInt32(match.Value[0]));
       //return (match.Value == " ") ? "+" : String.Format("%{0:X2}", Convert.ToInt32(match.Value[0]));
     }
-
   }
+
+  #endregion Encoder
 }
