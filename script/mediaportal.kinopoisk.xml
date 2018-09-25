@@ -54,7 +54,7 @@
       </PluginDependencies>
       <GeneralInfo>
         <Name>Kinopoisk grabber for Mediaportal</Name>
-        <Id>a54e4eba-bd35-44bb-a494-a272b49418cf</Id>
+        <Id>1dd1069f-4364-484e-84c6-91d3005d960e</Id>
         <Author>ajs</Author>
         <HomePage>https://github.com/andrewjswan/mediaportal-kinopoisk-ru-grabber</HomePage>
         <ForumPage>http://forum.team-mediaportal.com/threads/russian-kinopoisk-ru.93004/</ForumPage>
@@ -66,10 +66,10 @@
           <Revision>100</Revision>
         </Version>
         <ExtensionDescription>Kinopoisk grabber for Mediaportal</ExtensionDescription>
-        <VersionDescription />
+        <VersionDescription>Fixes for studios and MP 1.17</VersionDescription>
         <DevelopmentStatus>Stable</DevelopmentStatus>
         <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
-        <ReleaseDate>2016-05-21T13:46:50</ReleaseDate>
+        <ReleaseDate>2017-11-21T13:46:50</ReleaseDate>
         <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
         <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
         <Params>
@@ -160,7 +160,7 @@
       </PluginDependencies>
       <GeneralInfo>
         <Name>Kinopoisk grabber for Mediaportal</Name>
-        <Id>1dd1069f-4364-484e-84c6-91d3005d960e</Id>
+        <Id>a54e4eba-bd35-44bb-a494-a272b49418cf</Id>
         <Author>ajs</Author>
         <HomePage>https://github.com/andrewjswan/mediaportal-kinopoisk-ru-grabber</HomePage>
         <ForumPage>http://forum.team-mediaportal.com/threads/russian-kinopoisk-ru.93004/</ForumPage>
@@ -172,10 +172,10 @@
           <Revision>100</Revision>
         </Version>
         <ExtensionDescription>Kinopoisk grabber for Mediaportal</ExtensionDescription>
-        <VersionDescription>Fixes for studios and MP 1.17</VersionDescription>
+        <VersionDescription />
         <DevelopmentStatus>Stable</DevelopmentStatus>
         <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
-        <ReleaseDate>2017-11-21T13:46:50</ReleaseDate>
+        <ReleaseDate>2016-05-21T13:46:50</ReleaseDate>
         <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
         <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
         <Params>
@@ -390,6 +390,120 @@
           <Minor>1</Minor>
           <Build>0</Build>
           <Revision>13</Revision>
+        </Version>
+        <ExtensionDescription>Russian grabbers for Mediaportal</ExtensionDescription>
+        <VersionDescription>New russian grabbers, search by Kinopoisk/TMDB/IMDB ...</VersionDescription>
+        <DevelopmentStatus>Stable</DevelopmentStatus>
+        <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
+        <ReleaseDate>2018-03-23T13:46:50</ReleaseDate>
+        <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
+        <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
+        <Params>
+          <Items>
+            <SectionParam Name="Online Icon">
+              <Value>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/script/build.icon.png</Value>
+              <ValueType>String</ValueType>
+              <Description>The icon file of the package stored online (jpg,png,bmp)</Description>
+            </SectionParam>
+            <SectionParam Name="Configuration file">
+              <Value />
+              <ValueType>Template</ValueType>
+              <Description>The file used to configure the extension.
+ If it has .exe extension the will be executed.
+ If it has .dll extension it's started like MP plugin configuration.</Description>
+            </SectionParam>
+            <SectionParam Name="Online Screenshots">
+              <Value>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/screenshot/scr.kinopoisk.01.png;https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/screenshot/scr.kinopoisk.02.png</Value>
+              <ValueType>String</ValueType>
+              <Description>Online stored screenshot urls separated by ; </Description>
+            </SectionParam>
+            <SectionParam Name="Force to uninstall on update">
+              <Value>YES</Value>
+              <ValueType>Bool</ValueType>
+              <Description>Show dialog and force to uninstall previous version when updating an extension. Should only be disabled if you are using an NSIS/MSI installer.</Description>
+            </SectionParam>
+          </Items>
+        </Params>
+      </GeneralInfo>
+      <UniqueFileList>
+        <Items />
+      </UniqueFileList>
+      <ProjectSettings>
+        <FolderGroups />
+      </ProjectSettings>
+      <IsSkin>false</IsSkin>
+    </PackageClass>
+    <PackageClass>
+      <Version>2.0</Version>
+      <Groups>
+        <Items>
+          <GroupItem Name="Russian grabbers">
+            <DisplayName>Russian grabbers</DisplayName>
+            <DefaulChecked>true</DefaulChecked>
+            <Description>Russian grabbers</Description>
+            <Files>
+              <Items />
+            </Files>
+          </GroupItem>
+          <GroupItem Name="Mediaportal internal grabbers">
+            <DisplayName>Mediaportal internal grabbers</DisplayName>
+            <DefaulChecked>false</DefaulChecked>
+            <Description>Mediaportal internal grabbers</Description>
+            <Files>
+              <Items />
+            </Files>
+          </GroupItem>
+          <GroupItem Name="Libraries">
+            <DisplayName>Libraries</DisplayName>
+            <DefaulChecked>true</DefaulChecked>
+            <Description>Libraries</Description>
+            <Files>
+              <Items />
+            </Files>
+          </GroupItem>
+        </Items>
+      </Groups>
+      <Sections>
+        <Items />
+      </Sections>
+      <Dependencies>
+        <Items>
+          <DependencyItem>
+            <Type>MediaPortal</Type>
+            <Id />
+            <MinVersion>
+              <Major>1</Major>
+              <Minor>1</Minor>
+              <Build>6</Build>
+              <Revision>27644</Revision>
+            </MinVersion>
+            <MaxVersion>
+              <Major>1</Major>
+              <Minor>1</Minor>
+              <Build>6</Build>
+              <Revision>27644</Revision>
+            </MaxVersion>
+            <WarnOnly>false</WarnOnly>
+            <Message>requires MediaPortal version 1.1.6.27644 to 1.1.6.27644.</Message>
+            <Name>MediaPortal</Name>
+          </DependencyItem>
+        </Items>
+      </Dependencies>
+      <PluginDependencies>
+        <Items />
+      </PluginDependencies>
+      <GeneralInfo>
+        <Name>Russian grabbers for Mediaportal</Name>
+        <Id>1dd1069f-4364-484e-84c6-91d3005d960e</Id>
+        <Author>ajs</Author>
+        <HomePage>https://github.com/andrewjswan/mediaportal-kinopoisk-ru-grabber</HomePage>
+        <ForumPage>http://forum.team-mediaportal.com/threads/russian-kinopoisk-ru.93004/</ForumPage>
+        <UpdateUrl>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/script/mediaportal.kinopoisk.xml</UpdateUrl>
+        <Version>
+          <Major>1</Major>
+          <Minor>1</Minor>
+          <Build>0</Build>
+          <Revision>15</Revision>
         </Version>
         <ExtensionDescription>Russian grabbers for Mediaportal</ExtensionDescription>
         <VersionDescription>New russian grabbers, search by Kinopoisk/TMDB/IMDB ...</VersionDescription>

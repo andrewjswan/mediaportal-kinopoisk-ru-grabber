@@ -260,7 +260,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
       <Major>1</Major>
       <Minor>1</Minor>
       <Build>0</Build>
-      <Revision>13</Revision>
+      <Revision>15</Revision>
     </Version>
     <ExtensionDescription>Russian grabbers for Mediaportal</ExtensionDescription>
     <VersionDescription>New russian grabbers, search by Kinopoisk/TMDB/IMDB ...</VersionDescription>
@@ -356,7 +356,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>pack.icon.png</LocalFileName>
-        <ZipFileName>Installer{CopyFile}\{56991ea0-d349-4351-94dc-445e02ddcfaa}-pack.icon.png</ZipFileName>
+        <ZipFileName>Installer{CopyFile}\{f32aa961-d366-44c4-af73-1a7ac533a0d5}-pack.icon.png</ZipFileName>
         <DestinationFilename />
       </FileItem>
     </Items>

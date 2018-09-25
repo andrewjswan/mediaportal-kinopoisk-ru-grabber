@@ -21,7 +21,7 @@ using System.Web;
 internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
   const string strGrabber = "KTI_MDB";
-  const string strGrabberVersion = "20180323.I by ajs";
+  const string strGrabberVersion = "20180925.I by ajs";
   const string strGrabberName = "KP/TMDB/IMDB Grabber v" + strGrabberVersion; 
 
   public Grabber()
@@ -2282,6 +2282,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
   {
     // Log.Debug("{0} GetKinopoiskResponse: {1}", strGrabber, url);
 
+    /*
     string plexurl = "http://plex.filmingdata.com/reqh";
     string plexxs = string.Empty;
     string plexxt = string.Empty;
@@ -2315,7 +2316,30 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
     {
       webRequest = null;
     }
-    // Log.Debug("{0} GetKinopoiskResponse: {1} - {2}", strGrabber, plexxs, plexxt);
+    // Log.Debug("{0} GetKinopoiskHashResponse: {1} - {2}", strGrabber, plexxs, plexxt);
+    */
+
+    string salt = "IDATevHDS7";
+    DateTime now = DateTime.Now;
+
+    // x-timestamp
+    long isec = ((DateTimeOffset)now).ToUnixTimeSeconds();
+    string plexxt = isec.ToString(); // x-timestamp
+
+    // x-signature
+    int index = url.IndexOf(KP_BaseUrl);
+    string kurl = (index < 0) ? url : url.Remove(index, KP_BaseUrl.Length);
+    string hstr = kurl + plexxt + salt;
+    System.Security.Cryptography.MD5 md5 = System.Security.Cryptography.MD5.Create();
+    byte[] iBytes = System.Text.Encoding.ASCII.GetBytes(hstr);
+    byte[] hash = md5.ComputeHash(iBytes);
+
+    System.Text.StringBuilder sb = new System.Text.StringBuilder();
+    for (int i = 0; i < hash.Length; i++)
+    {
+        sb.Append(hash[i].ToString("X2"));
+    }
+    string plexxs = sb.ToString().ToLowerInvariant(); // x-signature
 
     if (string.IsNullOrEmpty(plexxs) || string.IsNullOrEmpty(plexxt))
     {
