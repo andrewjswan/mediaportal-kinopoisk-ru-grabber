@@ -260,13 +260,13 @@ Click Next to continue or Cancel to exit Setup.</Value>
       <Major>1</Major>
       <Minor>1</Minor>
       <Build>0</Build>
-      <Revision>15</Revision>
+      <Revision>17</Revision>
     </Version>
     <ExtensionDescription>Russian grabbers for Mediaportal</ExtensionDescription>
     <VersionDescription>New russian grabbers, search by Kinopoisk/TMDB/IMDB ...</VersionDescription>
     <DevelopmentStatus>Stable</DevelopmentStatus>
     <OnlineLocation>https://raw.githubusercontent.com/andrewjswan/mediaportal-kinopoisk-ru-grabber/master/build/mediaportal.kinopoisk.mpe1</OnlineLocation>
-    <ReleaseDate>2018-03-23T13:46:50</ReleaseDate>
+    <ReleaseDate>2018-09-26T13:46:50</ReleaseDate>
     <Tags>mediaportal, grabber, kinopoisk, russian</Tags>
     <Location>..\build\mediaportal.kinopoisk.mpe1</Location>
     <Params>
@@ -356,7 +356,7 @@ Click Next to continue or Cancel to exit Setup.</Value>
         <Param1 />
         <UpdateOption>OverwriteIfOlder</UpdateOption>
         <LocalFileName>pack.icon.png</LocalFileName>
-        <ZipFileName>Installer{CopyFile}\{f32aa961-d366-44c4-af73-1a7ac533a0d5}-pack.icon.png</ZipFileName>
+        <ZipFileName>Installer{CopyFile}\{5331c30c-eb8f-4275-b88c-aee4a2b37bc7}-pack.icon.png</ZipFileName>
         <DestinationFilename />
       </FileItem>
     </Items>
