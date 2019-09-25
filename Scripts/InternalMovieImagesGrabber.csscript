@@ -1,4 +1,4 @@
-﻿//css_reference "core.dll";
+//css_reference "core.dll";
 //css_reference "Databases.dll";
 //css_reference "utils.dll";
 
@@ -253,7 +253,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
 
             if (!string.IsNullOrEmpty(strBd))
             {
-              strBd = string.Format("http://image.tmdb.org/t/p/original/{0}", strBd);
+              strBd = string.Format("http://image.tmdb.org/t/p/original/{0}", strBd); // w500 or w1280 or original (image width)
               fanartList.Add(strBd);
             }
           }
@@ -344,7 +344,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
 
     if (!string.IsNullOrEmpty(imdbMovieID) && imdbMovieID.StartsWith("tt"))
     {
-      string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/movie/{0}/images?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a", imdbMovieID);
+      string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/movie/{0}/images?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a&language=en", imdbMovieID);
       GetTmdbPage(defaultPosterPageLinkUrl, "utf-8", out uri, ref strBodyTmdb);
       string posterBlock =
         Regex.Match(strBodyTmdb, @"""posters"":\[.*?\]", RegexOptions.IgnoreCase | RegexOptions.Singleline).Value;
@@ -354,7 +354,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       foreach (Match cover in covers)
       {
         string coverUrl = string.Empty;
-        coverUrl = string.Format("http://image.tmdb.org/t/p/w780/{0}",cover.Groups["cover"].Value);
+        coverUrl = string.Format("http://image.tmdb.org/t/p/w500/{0}",cover.Groups["cover"].Value);
         imageList.Add(coverUrl);
       }
 
@@ -363,7 +363,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
 
     if (!string.IsNullOrEmpty(movieTitle))
     {
-      string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/search/movie?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a&query={0}", movieTitle);
+      string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/search/movie?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a&query={0}&language=en", movieTitle);
       GetTmdbPage(defaultPosterPageLinkUrl, "utf-8", out uri, ref strBodyTmdb);
 
       // Get all cover links and put it in the "cover" group
@@ -372,7 +372,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       foreach (Match cover in covers)
       {
         string coverUrl = string.Empty;
-        coverUrl = string.Format("http://image.tmdb.org/t/p/w780/{0}", cover.Groups["cover"].Value);
+        coverUrl = string.Format("http://image.tmdb.org/t/p/w500/{0}", cover.Groups["cover"].Value);
         imageList.Add(coverUrl);
       }
     }
@@ -385,7 +385,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
     string uri = string.Empty;
     ArrayList actorThumbs = new ArrayList();
 
-    string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/search/person?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a&query={0}", actorName);
+    string defaultPosterPageLinkUrl = string.Format("http://api.themoviedb.org/3/search/person?api_key=2ed40b5d82aa804a2b1fcedb5ca8d97a&query={0}&language=en", actorName);
     GetTmdbPage(defaultPosterPageLinkUrl, "utf-8", out uri, ref strXml);
 
     MatchCollection actorImages = Regex.Matches(strXml, @"""profile_path"":""/(?<cover>.*?jpg)""");
@@ -398,7 +398,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
     foreach (Match actorImage in actorImages)
     {
       string actor = string.Empty;
-      actor = string.Format("http://image.tmdb.org/t/p/original/{0}", actorImage.Groups["cover"].Value);
+      actor = string.Format("http://image.tmdb.org/t/p/w500/{0}", actorImage.Groups["cover"].Value);
       actorThumbs.Add(actor);
     }
 
@@ -420,7 +420,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       HttpWebRequest req = (HttpWebRequest) WebRequest.Create(strURL);
       req.Headers.Add("Accept-Language", "en-US");
       req.Timeout = 20000;
-      req.ReadWriteTimeout = req.Timeout;
+			req.ReadWriteTimeout = 20000;
       result = req.GetResponse();
       receiveStream = result.GetResponseStream();
 
@@ -488,7 +488,7 @@ internal class MovieImagesGrabber : InternalCSScriptGrabbersLoader.Movies.IInter
       req.Method = WebRequestMethods.Http.Get;
       req.Accept = "application/json";
       req.Timeout = 20000;
-      req.ReadWriteTimeout = req.Timeout;
+			req.ReadWriteTimeout = 20000;
 
       result = req.GetResponse();
       receiveStream = result.GetResponseStream();

@@ -27,7 +27,7 @@ using System.Web;
 internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScriptGrabber
 {
   const string strGrabber = "KTI_MDB";
-  const string strGrabberVersion = "20180926.I by ajs";
+  const string strGrabberVersion = "20190902.I by ajs";
   const string strGrabberName = "KP/TMDB/IMDB Grabber v" + strGrabberVersion; 
 
   public Grabber()
@@ -407,8 +407,8 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
 
   private const string KP_BaseUrl = "https://ext.kinopoisk.ru/ios/5.0.0/";
   private const string KP_ImageUrl = "https://st.kp.yandex.net/images/";
-  private const string KP_Agent = "Android client(4.4 / api19), ru.kinopoisk/4.2.0 (55)";
-  private const string KP_Android = "19";
+  private const string KP_Agent = "Android client (4.4 / api22),ru.kinopoisk/4.2.1 (52)";
+  private const string KP_Android = "22";
   private const string KP_Plex = "2.0.0";
 
   #endregion Kinopoisk Parameters
@@ -2332,43 +2332,6 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
   private static string GetKinopoiskResponse(string url)
   {
     // Log.Debug("{0} GetKinopoiskResponse: {1}", strGrabber, url);
-
-    /*
-    string plexurl = "http://plex.filmingdata.com/reqh";
-    string plexxs = string.Empty;
-    string plexxt = string.Empty;
-
-    System.Net.HttpWebRequest webRequest;
-    try
-    {
-      webRequest = (System.Net.HttpWebRequest)System.Net.WebRequest.Create(plexurl);
-      webRequest.Headers.Clear();
-      webRequest.Timeout = 5000;
-      webRequest.Method = System.Net.WebRequestMethods.Http.Head;
-
-      webRequest.Headers.Add("Pragma", "no-cache");
-      webRequest.Headers.Add("Cache-Control", "no-cache");
-
-      webRequest.Headers.Add("X-Kinopoisk-Url", url);
-      webRequest.Headers.Add("X-Server-ID", KP_Plex);
-      using (System.Net.WebResponse webResponse = webRequest.GetResponse())
-      {
-        plexxs = webResponse.Headers["x-signature"];
-        plexxt = webResponse.Headers["x-timestamp"];
-        webResponse.Close();
-      }
-    }
-    catch
-    {
-      plexxs = string.Empty;
-      plexxt = string.Empty;
-    }
-    finally
-    {
-      webRequest = null;
-    }
-    // Log.Debug("{0} GetKinopoiskHashResponse: {1} - {2}", strGrabber, plexxs, plexxt);
-    */
 
     string salt = "IDATevHDS7";
     DateTime now = DateTime.Now;

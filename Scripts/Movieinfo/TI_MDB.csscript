@@ -658,7 +658,7 @@ internal class Grabber : MarshalByRefObject, MediaPortal.Video.Database.IIMDBScr
           }
         }
       }
-      movie.MPARating = sCertification;
+      movie.MPARating = sCertification.Replace("+", string.Empty);
     }
     catch { }
   }
